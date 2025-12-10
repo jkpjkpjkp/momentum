@@ -33,59 +33,29 @@ N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)
 
 def cross_sectional_standardize(values: np.ndarray) -> np.ndarray:
     """Standardize values cross-sectionally (each row has mean=0, std=1)."""
-    result = np.full_like(values, np.nan, dtype=np.float64)
+    mean = np.nanmean(values, axis=1, keepdims=True)
+    std = np.nanstd(values, axis=1, keepdims=True)
+    result = (values - mean) / std
 
-    for t in range(values.shape[0]):
-        row = values[t, :]
-        valid = ~np.isnan(row)
-        n_valid = valid.sum()
-
-        if n_valid < 10:  # Need minimum observations
-            continue
-
-        mu = np.nanmean(row)
-        sigma = np.nanstd(row)
-
-        if sigma > 1e-10:
-            result[t, valid] = (row[valid] - mu) / sigma
+    n_valid = np.sum(~np.isnan(values), axis=1)
+    invalid_rows = (n_valid < 10) | (std.squeeze() <= 1e-10)
+    result[invalid_rows, :] = np.nan
 
     return result
 
 
-def load_anomaly_set(
-    anomaly_list: list[Callable],
-) -> np.ndarray:
-    n_anomalies = len(anomaly_list)
-
+def load_anomaly_set(anomaly_list: list[Callable]) -> np.ndarray:
     results = []
     for j, anomaly_func in enumerate(anomaly_list):
-        print(f"  Loading anomaly {j+1}/{n_anomalies}: {anomaly_func.__name__}")
+        print(f"  Loading anomaly {j+1}/{len(anomaly_list)}: {anomaly_func.__name__}")
 
         x = anomaly_func()
         x = cross_sectional_standardize(x)
         results.append(x)
-
     return np.stack(results, axis=2)
 
 
 def load_all_anomalies() -> tuple[np.ndarray, list[str]]:
-    """
-    Load all anomalies from selected sets.
-
-    Parameters
-    ----------
-    reference_time : np.ndarray
-        Daily time grid
-    reference_ticker : np.ndarray
-        Stock ticker array
-
-    Returns
-    -------
-    anomalies : np.ndarray
-        (N_time, N_stocks, N_anomalies) standardized anomaly values
-    names : list[str]
-        Names of anomalies
-    """
     all_funcs = []
     all_names = []
 
@@ -100,7 +70,6 @@ def load_all_anomalies() -> tuple[np.ndarray, list[str]]:
         all_names.append(f"fm_{func.__name__}")
 
     anomalies = load_anomaly_set(all_funcs)
-
     return anomalies, all_names
 
 
