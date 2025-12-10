@@ -6,18 +6,20 @@ import polars as pl
 
 DATA_DIR = Path("/data/share/data")
 
+# TODO: add caching (reentrant)
 def load_data(category: str, field: str, time_and_ticker=False):
-    """Load data from h5 file by category and field name."""
     path = DATA_DIR / category / f"{field}.h5"
     with h5py.File(path, "r") as f:
         time = f["time"][:]
         ticker = f["ticker"][:]
         values = f["values"][:]
+        
     if time.shape[0] > 3643:
         time = time[:3643]
         values = values[:3643, :]
     assert time.shape == (3643,)
     assert ticker.shape == (5480,)
+    
     if time_and_ticker:
         return time, ticker, values
     else:
@@ -26,9 +28,6 @@ def load_data(category: str, field: str, time_and_ticker=False):
 
 DATA_RAW_DIR = Path("/data/share/data_raw")
 
-# Chinese market intraday periods (30-min bars)
-# Period 0: Overnight (previous close -> 10:00 open)
-# Periods 1-8: Intraday 30-min bars
 INTRADAY_PERIODS = [
     "10:00:00",  # Period 1: 09:30-10:00
     "10:30:00",  # Period 2: 10:00-10:30
@@ -56,8 +55,6 @@ def load_intraday_data(date: str) -> "pl.DataFrame":
     """
 
     path = DATA_RAW_DIR / "intra_30min" / f"{date}.parquet"
-    if not path.exists():
-        return None
     return pl.read_parquet(path)
 
 
