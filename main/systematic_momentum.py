@@ -14,12 +14,11 @@ Uses two anomaly sets:
 - the_short_of_it: 11 anomalies (financial distress, momentum, profitability, etc.)
 - factor_momentum: 15 anomalies (Ehsani & Linnainmaa factors)
 """
-
 import numpy as np
 from typing import Callable
 import polars as pl
+from datetime import datetime
 
-# Import anomaly sets
 from the_short_of_it import anomalies as short_anomalies
 from factor_momentum import anomalies as fm_anomalies
 from .utils import (
@@ -27,9 +26,9 @@ from .utils import (
     load_intraday_data,
     compute_intraday_returns,
     INTRADAY_PERIODS,
-    N_INTRADAY_PERIODS,
     DATA_RAW_DIR,
 )
+N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)
 
 
 def cross_sectional_standardize(values: np.ndarray) -> np.ndarray:
@@ -497,13 +496,12 @@ def run_intraday_cross_sectional_regression(
     sys_values : dict
         {date: {ticker: sys_value}}
     """
-    import pandas as pd
 
     # Create lookup for characteristics
     ticker_to_idx = {t: i for i, t in enumerate(char_ticker)}
 
     # Convert nanosecond timestamps to dates for matching
-    char_dates = pd.to_datetime(char_time).strftime("%Y-%m-%d").tolist()
+    char_dates = [datetime.utcfromtimestamp(t / 1e9).strftime("%Y-%m-%d") for t in char_time]
     date_to_idx = {d: i for i, d in enumerate(char_dates)}
 
     n_factors = characteristics.shape[2]

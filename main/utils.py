@@ -38,8 +38,6 @@ INTRADAY_PERIODS = [
     "14:30:00",  # Period 7: 14:00-14:30
     "15:00:00",  # Period 8: 14:30-15:00 (market close)
 ]
-N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)  # 8 periods
-
 
 def load_intraday_data(date: str) -> "pl.DataFrame":
     """Load intraday 30-min bar data for a single day.
