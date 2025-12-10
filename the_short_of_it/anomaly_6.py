@@ -14,10 +14,10 @@ import numpy as np
 import h5py
 from pathlib import Path
 
-from ..main.utils import load_h5, load_data, DATA_DIR
+from main.utils import load_data
 
 
-def net_operating_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def net_operating_assets():
     """
     Compute Net Operating Assets (NOA) scaled by total assets.
 
@@ -32,12 +32,12 @@ def net_operating_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     Returns:
         (time, ticker, noa) arrays
     """
-    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
-    _, _, cash = load_data("balance_sheet", "cash_equivalent_mrq_0")
-    _, _, financial_assets = load_data("balance_sheet", "financial_asset_held_for_trading_mrq_0")
-    _, _, short_term_loans = load_data("balance_sheet", "short_term_loans_mrq_0")
-    _, _, long_term_loans = load_data("balance_sheet", "long_term_loans_mrq_0")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
+    cash = load_data("balance_sheet", "cash_equivalent_mrq_0")
+    financial_assets = load_data("balance_sheet", "financial_asset_held_for_trading_mrq_0")
+    short_term_loans = load_data("balance_sheet", "short_term_loans_mrq_0")
+    long_term_loans = load_data("balance_sheet", "long_term_loans_mrq_0")
 
     # Replace NaN with 0 for items that may not exist for all firms
     cash = np.nan_to_num(cash, nan=0.0)
@@ -56,7 +56,7 @@ def net_operating_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     total_assets_safe = np.where(total_assets > 0, total_assets, np.nan)
     noa = noa_raw / total_assets_safe
 
-    return time, ticker, noa
+    return noa
 
 
 if __name__ == "__main__":

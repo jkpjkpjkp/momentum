@@ -8,10 +8,10 @@ they are to true economic profitability."""
 
 import numpy as np
 
-from ..main.utils import load_data
+from main.utils import load_data
 
 
-def gross_profitability() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def gross_profitability():
     """
     Compute gross profitability following Novy-Marx (2010).
 
@@ -23,12 +23,10 @@ def gross_profitability() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     Higher gross profitability predicts higher future returns.
 
-    Returns:
-        (time, ticker, gross_profitability) arrays
     """
-    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, operating_revenue = load_data("income_statement", "operating_revenue_mrq_0")
-    _, _, operating_costs = load_data("income_statement", "operating_costs_mrq_0")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    operating_revenue = load_data("income_statement", "operating_revenue_mrq_0")
+    operating_costs = load_data("income_statement", "operating_costs_mrq_0")
 
     # Gross profit = Operating Revenue - Operating Costs
     gross_profit = operating_revenue - operating_costs
@@ -38,7 +36,7 @@ def gross_profitability() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     gp = gross_profit / total_assets_safe
 
-    return time, ticker, gp
+    return gp
 
 
 if __name__ == "__main__":

@@ -6,14 +6,22 @@ import polars as pl
 
 DATA_DIR = Path("/data/share/data")
 
-def load_data(category: str, field: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_data(category: str, field: str, time_and_ticker=False):
     """Load data from h5 file by category and field name."""
     path = DATA_DIR / category / f"{field}.h5"
     with h5py.File(path, "r") as f:
         time = f["time"][:]
         ticker = f["ticker"][:]
         values = f["values"][:]
-    return time, ticker, values
+    if time.shape[0] > 3643:
+        time = time[:3643]
+        values = values[:3643, :]
+    if time_and_ticker:
+        return time, ticker, values
+    else:
+        assert time.shape == (3643,)
+        assert ticker.shape == (5480,)
+        return values
 
 
 DATA_RAW_DIR = Path("/data/share/data_raw")

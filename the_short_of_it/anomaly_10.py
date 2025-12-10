@@ -9,10 +9,10 @@ mispricing is a culprit."""
 
 import numpy as np
 
-from ..main.utils import load_data
+from main.utils import load_data
 
 
-def return_on_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def return_on_assets():
     """
     Compute return on assets following Fama and French (2006) / Chen et al. (2010).
 
@@ -20,12 +20,9 @@ def return_on_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         = Net Profit (MRQ) / Total Assets (MRQ-1)
 
     Higher ROA predicts higher future returns.
-
-    Returns:
-        (time, ticker, roa) arrays
     """
-    time, ticker, net_profit = load_data("income_statement", "net_profit_mrq_0")
-    _, _, total_assets_lag = load_data("balance_sheet", "total_assets_mrq_1")
+    net_profit = load_data("income_statement", "net_profit_mrq_0")
+    total_assets_lag = load_data("balance_sheet", "total_assets_mrq_1")
 
     # Avoid division by zero
     total_assets_lag_safe = np.where(total_assets_lag > 0, total_assets_lag, np.nan)
@@ -33,7 +30,7 @@ def return_on_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Return on assets
     roa = net_profit / total_assets_lag_safe
 
-    return time, ticker, roa
+    return roa
 
 
 if __name__ == "__main__":

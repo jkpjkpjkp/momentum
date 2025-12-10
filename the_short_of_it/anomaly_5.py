@@ -12,10 +12,10 @@ import numpy as np
 import h5py
 from pathlib import Path
 
-from ..main.utils import load_h5, load_data, DATA_DIR
+from main.utils import load_data
 
 
-def total_accruals() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def total_accruals():
     """
     Compute total accruals following Sloan (1996).
 
@@ -34,21 +34,18 @@ def total_accruals() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     approach: Total Accruals = Δ(Noncash Working Capital) / Avg Total Assets
 
     Noncash Working Capital = (Current Assets - Cash) - Current Liabilities
-
-    Returns:
-        (time, ticker, total_accruals) arrays
     """
     # Load balance sheet data
-    time, ticker, current_assets = load_data("balance_sheet", "current_assets_mrq_0")
-    _, _, cash = load_data("balance_sheet", "cash_equivalent_mrq_0")
-    _, _, current_liabilities = load_data("balance_sheet", "current_liabilities_mrq_0")
-    _, _, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    current_assets = load_data("balance_sheet", "current_assets_mrq_0")
+    cash = load_data("balance_sheet", "cash_equivalent_mrq_0")
+    current_liabilities = load_data("balance_sheet", "current_liabilities_mrq_0")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
 
     # Load lagged data (mrq_4 = 4 quarters ago = 1 year ago)
-    _, _, current_assets_lag = load_data("balance_sheet", "current_assets_mrq_4")
-    _, _, cash_lag = load_data("balance_sheet", "cash_equivalent_mrq_4")
-    _, _, current_liabilities_lag = load_data("balance_sheet", "current_liabilities_mrq_4")
-    _, _, total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
+    current_assets_lag = load_data("balance_sheet", "current_assets_mrq_4")
+    cash_lag = load_data("balance_sheet", "cash_equivalent_mrq_4")
+    current_liabilities_lag = load_data("balance_sheet", "current_liabilities_mrq_4")
+    total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
 
     # Noncash working capital = (Current Assets - Cash) - Current Liabilities
     nwc = (current_assets - cash) - current_liabilities
@@ -66,7 +63,7 @@ def total_accruals() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Total accruals scaled by average total assets
     accruals = delta_nwc / avg_total_assets
 
-    return time, ticker, accruals
+    return accruals
 
 
 if __name__ == "__main__":

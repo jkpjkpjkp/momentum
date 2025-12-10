@@ -9,81 +9,37 @@ import numpy as np
 from pathlib import Path
 from main.utils import load_data
 
-def align_to_daily(
-    daily_time: np.ndarray,
-    quarterly_time: np.ndarray,
-    quarterly_values: np.ndarray,
-) -> np.ndarray:
-    """Forward-fill quarterly/shares data to daily frequency.
-
-    Parameters
-    ----------
-    daily_time : np.ndarray
-        Daily timestamps (N_daily,)
-    quarterly_time : np.ndarray
-        Quarterly timestamps (N_quarterly,)
-    quarterly_values : np.ndarray
-        Quarterly values (N_quarterly, N_stocks)
-
-    Returns
-    -------
-    np.ndarray
-        (N_daily, N_stocks) forward-filled values
-    """
-    n_daily = len(daily_time)
-    n_stocks = quarterly_values.shape[1]
-    result = np.full((n_daily, n_stocks), np.nan)
-
-    # Use searchsorted for efficient forward-fill
-    # For each daily timestamp, find the index of the last quarterly timestamp <= it
-    indices = np.searchsorted(quarterly_time, daily_time, side="right") - 1
-
-    for i in range(n_daily):
-        idx = indices[i]
-        if idx >= 0:
-            result[i, :] = quarterly_values[idx, :]
-
-    return result
-
-
 # -----------------------------------------------------------------------------
 # 1. Size (SMB) - Small Minus Big
 # -----------------------------------------------------------------------------
-def size() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Market capitalization. Lower = small cap (long side of SMB).
-
-    Returns negative market cap so higher values = smaller firms.
-    """
-    time, ticker, close = load_data("daily", "close")
-    shares_time, _, shares = load_data("shares", "total_a")
-    shares_aligned = align_to_daily(time, shares_time, shares)
-    market_cap = close * shares_aligned
-    return time, ticker, -market_cap  # Negative so small = high exposure
+def size():
+    """(negative) Market capitalization. Lower = small cap (long side of SMB)."""
+    close = load_data("daily", "close")
+    shares = load_data("shares", "total_a")
+    market_cap = close * shares
+    return -market_cap  # small = high exposure
 
 
 # -----------------------------------------------------------------------------
 # 2. Book-to-Market (Value)
 # -----------------------------------------------------------------------------
-def book_to_market() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def book_to_market():
     """Book-to-market ratio. Higher = value stock (long side of HML)."""
-    time, ticker, close = load_data("daily", "close")
-    shares_time, _, shares = load_data("shares", "total_a")
-    be_time, _, book_equity = load_data("balance_sheet", "total_equity_mrq_0")
+    close = load_data("daily", "close")
+    shares = load_data("shares", "total_a")
+    be = load_data("balance_sheet", "total_equity_mrq_0")
 
-    shares_aligned = align_to_daily(time, shares_time, shares)
-    be_aligned = align_to_daily(time, be_time, book_equity)
-
-    market_cap = close * shares_aligned
-    bm = be_aligned / market_cap
-    return time, ticker, bm
+    market_cap = close * shares
+    bm = be / market_cap
+    return bm
 
 
 # -----------------------------------------------------------------------------
 # 3. Momentum (UMD) - Up Minus Down
 # -----------------------------------------------------------------------------
-def momentum() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def momentum():
     """Past 12-month return, skipping most recent month. Higher = winner."""
-    time, ticker, ret = load_data("daily", "return")
+    time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
 
     n_time, n_stocks = ret.shape
     mom = np.full((n_time, n_stocks), np.nan)
@@ -100,15 +56,15 @@ def momentum() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         cum_ret = np.nanprod(1 + period_ret, axis=0) - 1
         mom[t, :] = cum_ret
 
-    return time, ticker, mom
+    return mom
 
 
 # -----------------------------------------------------------------------------
 # 4. Short-Term Reversals
 # -----------------------------------------------------------------------------
-def short_term_reversal() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def short_term_reversal():
     """Prior month return. Lower = reversal long side (losers become winners)."""
-    time, ticker, ret = load_data("daily", "return")
+    time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
 
     n_time, n_stocks = ret.shape
     str_factor = np.full((n_time, n_stocks), np.nan)
@@ -119,15 +75,15 @@ def short_term_reversal() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         cum_ret = np.nanprod(1 + period_ret, axis=0) - 1
         str_factor[t, :] = -cum_ret  # Negative: losers have high exposure
 
-    return time, ticker, str_factor
+    return str_factor
 
 
 # -----------------------------------------------------------------------------
 # 5. Long-Term Reversals
 # -----------------------------------------------------------------------------
-def long_term_reversal() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def long_term_reversal():
     """Returns from month -60 to -13. Lower = reversal long side."""
-    time, ticker, ret = load_data("daily", "return")
+    time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
 
     n_time, n_stocks = ret.shape
     ltr = np.full((n_time, n_stocks), np.nan)
@@ -141,22 +97,22 @@ def long_term_reversal() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         cum_ret = np.nanprod(1 + period_ret, axis=0) - 1
         ltr[t, :] = -cum_ret  # Negative: past losers have high exposure
 
-    return time, ticker, ltr
+    return ltr
 
 
 # -----------------------------------------------------------------------------
 # 6. Accruals
 # -----------------------------------------------------------------------------
-def accruals() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def accruals():
     """Operating accruals. Lower = conservative (long side)."""
-    time, ticker, current_assets = load_data("balance_sheet", "current_assets_mrq_0")
-    _, _, current_assets_lag = load_data("balance_sheet", "current_assets_mrq_4")
-    _, _, cash = load_data("balance_sheet", "cash_equivalent_mrq_0")
-    _, _, cash_lag = load_data("balance_sheet", "cash_equivalent_mrq_4")
-    _, _, current_liab = load_data("balance_sheet", "current_liabilities_mrq_0")
-    _, _, current_liab_lag = load_data("balance_sheet", "current_liabilities_mrq_4")
-    _, _, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
+    time, ticker, current_assets = load_data("balance_sheet", "current_assets_mrq_0", time_and_ticker=True)
+    current_assets_lag = load_data("balance_sheet", "current_assets_mrq_4")
+    cash = load_data("balance_sheet", "cash_equivalent_mrq_0")
+    cash_lag = load_data("balance_sheet", "cash_equivalent_mrq_4")
+    current_liab = load_data("balance_sheet", "current_liabilities_mrq_0")
+    current_liab_lag = load_data("balance_sheet", "current_liabilities_mrq_4")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
 
     # Change in non-cash current assets
     delta_ca = current_assets - current_assets_lag
@@ -167,64 +123,64 @@ def accruals() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     avg_assets = (total_assets + total_assets_lag) / 2
     acc = ((delta_ca - delta_cash) - delta_cl) / avg_assets
 
-    return time, ticker, -acc  # Negative: low accruals = high exposure
+    return -acc  # Negative: low accruals = high exposure
 
 
 # -----------------------------------------------------------------------------
 # 7. Profitability (ROA)
 # -----------------------------------------------------------------------------
-def profitability() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def profitability():
     """Return on assets. Higher = more profitable (long side)."""
-    time, ticker, net_profit = load_data("income_statement", "net_profit_mrq_0")
-    _, _, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    net_profit = load_data("income_statement", "net_profit_mrq_0")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
     roa = net_profit / total_assets
-    return time, ticker, roa
+    return roa
 
 
 # -----------------------------------------------------------------------------
 # 8. Investment
 # -----------------------------------------------------------------------------
-def investment() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def investment():
     """Asset growth. Lower = conservative investment (long side)."""
     time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
+    total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
     asset_growth = (total_assets - total_assets_lag) / total_assets_lag
-    return time, ticker, -asset_growth  # Negative: low growth = high exposure
+    return -asset_growth  # Negative: low growth = high exposure
 
 
 # -----------------------------------------------------------------------------
 # 9. Earnings-to-Price
 # -----------------------------------------------------------------------------
-def earnings_to_price() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def earnings_to_price():
     """Earnings yield. Higher = value (long side)."""
-    time, ticker, net_profit = load_data("income_statement", "net_profit_mrq_0")
-    _, _, close = load_data("daily", "close")
-    _, _, shares = load_data("shares", "total_a")
+    net_profit = load_data("income_statement", "net_profit_mrq_0")
+    close = load_data("daily", "close")
+    shares = load_data("shares", "total_a")
     market_cap = close * shares
     ep = net_profit / market_cap
-    return time, ticker, ep
+    return ep
 
 
 # -----------------------------------------------------------------------------
 # 10. Cash-Flow to Price
 # -----------------------------------------------------------------------------
-def cashflow_to_price() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def cashflow_to_price():
     """Operating cash flow yield. Higher = value (long side)."""
-    time, ticker, ocf = load_data("cash_flow_statement", "cash_flow_from_operating_activities_mrq_0")
-    _, _, close = load_data("daily", "close")
-    _, _, shares = load_data("shares", "total_a")
+    ocf = load_data("cash_flow_statement", "cash_flow_from_operating_activities_mrq_0")
+    close = load_data("daily", "close")
+    shares = load_data("shares", "total_a")
     market_cap = close * shares
     cfp = ocf / market_cap
-    return time, ticker, cfp
+    return cfp
 
 
 # -----------------------------------------------------------------------------
 # 11. Betting Against Beta (BAB)
 # -----------------------------------------------------------------------------
-def betting_against_beta() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def betting_against_beta():
     """Market beta. Lower beta = long side of BAB."""
-    time, ticker, ret = load_data("daily", "return")
-    _, _, mkt_weights = load_data("index_weights", "000300.XSHG")
+    time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
+    mkt_weights = load_data("index_weights", "000300.XSHG")
 
     n_time, n_stocks = ret.shape
     beta = np.full((n_time, n_stocks), np.nan)
@@ -255,16 +211,16 @@ def betting_against_beta() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
             cov = np.cov(sr[valid], mkt_ret[valid])[0, 1]
             beta[t, j] = cov / mkt_var
 
-    return time, ticker, -beta  # Negative: low beta = high exposure
+    return -beta  # low beta = high exposure
 
 
 # -----------------------------------------------------------------------------
 # 12. Residual Variance (Idiosyncratic Volatility)
 # -----------------------------------------------------------------------------
-def residual_variance() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def residual_variance():
     """Idiosyncratic volatility from CAPM. Higher = long side (lottery demand)."""
-    time, ticker, ret = load_data("daily", "return")
-    _, _, mkt_weights = load_data("index_weights", "000300.XSHG")
+    time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
+    mkt_weights = load_data("index_weights", "000300.XSHG")
 
     n_time, n_stocks = ret.shape
     resid_var = np.full((n_time, n_stocks), np.nan)
@@ -300,13 +256,13 @@ def residual_variance() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
             resid = sr[valid] - alpha_j - beta_j * mkt_ret[valid]
             resid_var[t, j] = np.var(resid)
 
-    return time, ticker, resid_var
+    return resid_var
 
 
 # -----------------------------------------------------------------------------
 # 13. Net Share Issues
 # -----------------------------------------------------------------------------
-def net_share_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def net_share_issues():
     """12-month change in shares outstanding. Lower = buybacks (long side)."""
     time, ticker, shares = load_data("shares", "total_a")
 
@@ -320,16 +276,16 @@ def net_share_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         shares_past = shares[t - lag, :]
         nsi[t, :] = (shares_now - shares_past) / shares_past
 
-    return time, ticker, -nsi  # Negative: share reduction = high exposure
+    return -nsi  # Negative: share reduction = high exposure
 
 
 # -----------------------------------------------------------------------------
 # 14. Liquidity (Turnover)
 # -----------------------------------------------------------------------------
-def liquidity() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def liquidity() -> np.ndarray:
     """Average turnover. Higher = more liquid (long side)."""
-    time, ticker, volume = load_data("daily", "volume")
-    _, _, shares = load_data("shares", "circulation_a")
+    time, ticker, volume = load_data("daily", "volume", time_and_ticker=True)
+    shares = load_data("shares", "circulation_a")
 
     n_time, n_stocks = volume.shape
     turnover = np.full((n_time, n_stocks), np.nan)
@@ -342,22 +298,22 @@ def liquidity() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         avg_vol = np.nanmean(vol, axis=0)
         turnover[t, :] = avg_vol / shr
 
-    return time, ticker, turnover
+    return turnover
 
 
 # -----------------------------------------------------------------------------
 # 15. Quality Minus Junk (QMJ)
 # -----------------------------------------------------------------------------
-def quality_minus_junk() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def quality_minus_junk():
     """Composite quality score. Higher = quality (long side).
 
     Combines: profitability, safety (low leverage, low volatility), growth
     """
-    time, ticker, net_profit = load_data("income_statement", "net_profit_mrq_0")
-    _, _, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_equity = load_data("balance_sheet", "total_equity_mrq_0")
-    _, _, total_liab = load_data("balance_sheet", "total_liabilities_mrq_0")
-    _, _, ret = load_data("daily", "return")
+    time, ticker, net_profit = load_data("income_statement", "net_profit_mrq_0", time_and_ticker=True)
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    total_equity = load_data("balance_sheet", "total_equity_mrq_0")
+    total_liab = load_data("balance_sheet", "total_liabilities_mrq_0")
+    ret = load_data("daily", "return")
 
     n_time, n_stocks = ret.shape
 
@@ -394,4 +350,4 @@ def quality_minus_junk() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Equal-weighted composite
     qmj = (z_roa + z_equity + z_vol) / 3
 
-    return time, ticker, qmj
+    return qmj

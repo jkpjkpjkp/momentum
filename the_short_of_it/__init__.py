@@ -1,8 +1,6 @@
 from .anomaly_1_2 import (
     financial_distress_chs,
     financial_distress_oscore,
-    financial_distress_1,
-    financial_distress_2,
 )
 from .anomaly_3_4 import net_stock_issues, composite_equity_issues
 from .anomaly_5 import total_accruals

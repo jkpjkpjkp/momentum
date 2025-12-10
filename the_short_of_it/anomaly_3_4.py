@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 from pathlib import Path
 
-from ..main.utils import load_data
+from main.utils import load_data
 
 
 """
@@ -18,7 +18,7 @@ post-issue years, equity issuers under-perform matching
 nonissuers with similar characteristics (anomaly 3). We
 measure net stock issues as the growth rate of the split-
 adjusted shares outstanding in the previous ﬁscal year."""
-def net_stock_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def net_stock_issues():
     """
     Compute net stock issues (Anomaly 3).
 
@@ -31,24 +31,12 @@ def net_stock_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         (time, ticker, net_stock_issues) arrays
     """
     # Load shares outstanding (_a stands for adjusted)
-    time, ticker, total_a = load_data("shares", "total_a")
+    time, ticker, total_a = load_data("shares", "total_a", time_and_ticker=True)
 
-    # Load adjustment factor for split adjustment (on daily grid, need to align)
-    time_d, _, ex_factor = load_data("daily", "ex_factor")
+    # Load adjustment factor for split adjustment
+    ex_factor = load_data("daily", "ex_factor")
 
-    # Find matching timestamp
-    time_d_dict = {t: i for i, t in enumerate(time_d)}
-    ex_aligned = np.full_like(total_a, np.nan)
-    for i, t in enumerate(time):
-        if t in time_d_dict:
-            ex_aligned[i, :] = ex_factor[time_d_dict[t], :]
-        else:
-            # Find closest earlier date
-            earlier = time_d[time_d <= t]
-            if len(earlier) > 0:
-                ex_aligned[i, :] = ex_factor[np.where(time_d == earlier[-1])[0][0], :]
-
-    adjusted_shares = total_a * ex_aligned
+    adjusted_shares = total_a * ex_factor
 
     # Compute year-over-year growth (approximately 252 trading days)
     # Use ~1 year lag for annual growth rate
@@ -64,7 +52,7 @@ def net_stock_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
             growth = (shares_curr / shares_prev) - 1
         net_issues[lag:, :] = growth
 
-    return time, ticker, net_issues
+    return net_issues
 
 
 """
@@ -76,7 +64,7 @@ based acquisitions increase the issuance measure, while
 repurchases, dividends, and other actions that take cash
 out of the ﬁrm reduce this issuance measure. They also
 ﬁnd that issuers under-perform nonissuers (anomaly 4)."""
-def composite_equity_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def composite_equity_issues():
     """
     Compute composite equity issuance (Anomaly 4) following Daniel & Titman (2006).
 
@@ -95,26 +83,16 @@ def composite_equity_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         (time, ticker, composite_equity_issuance) arrays
     """
     # Load daily data
-    time, ticker, close = load_data("daily", "close")
-    _, _, ret = load_data("daily", "return")
-
-    # Load shares outstanding (on different time grid)
-    time_s, _, total_a = load_data("shares", "total_a")
-
-    # Align shares to daily grid
-    time_s_dict = {t: i for i, t in enumerate(time_s)}
+    time, ticker, close = load_data("daily", "close", time_and_ticker=True)
     n_time = len(time)
     n_ticker = len(ticker)
-    shares_aligned = np.full((n_time, n_ticker), np.nan)
+    
+    ret = load_data("daily", "return")
 
-    last_idx = 0
-    for i, t in enumerate(time):
-        if t in time_s_dict:
-            last_idx = time_s_dict[t]
-        shares_aligned[i, :] = total_a[last_idx, :] if last_idx < len(time_s) else np.nan
-
+    # Load shares outstanding (on different time grid)
+    total_a = load_data("shares", "total_a")
     # Market equity = close * shares
-    market_equity = close * shares_aligned
+    market_equity = close * total_a
 
     # Compute 1-year (252 trading days) composite equity issuance
     lag = 252
@@ -137,4 +115,4 @@ def composite_equity_issues() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     composite_issues = np.full((n_time, n_ticker), np.nan)
     composite_issues[lag:, :] = cei
 
-    return time, ticker, composite_issues
+    return composite_issues

@@ -6,10 +6,10 @@ as the growth rate of total assets in the previous fiscal year."""
 
 import numpy as np
 
-from ..main.utils import load_data
+from main.utils import load_data
 
 
-def asset_growth() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def asset_growth():
     """
     Compute asset growth following Cooper, Gulen, and Schill (2008).
 
@@ -17,12 +17,9 @@ def asset_growth() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
                  = Total Assets_t / Total Assets_{t-1} - 1
 
     Higher asset growth predicts lower future returns.
-
-    Returns:
-        (time, ticker, asset_growth) arrays
     """
-    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
 
     # Avoid division by zero
     total_assets_lag_safe = np.where(total_assets_lag > 0, total_assets_lag, np.nan)
@@ -30,7 +27,7 @@ def asset_growth() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Asset growth rate
     ag = (total_assets / total_assets_lag_safe) - 1
 
-    return time, ticker, ag
+    return ag
 
 
 if __name__ == "__main__":

@@ -27,10 +27,7 @@ from pathlib import Path
 from main.utils import load_data
 
 
-# 1
-# lower subsequent returns -> high failure probability
-# Campbell, Hilscher, and Szilagyi (2008) Failure Probability Model
-def financial_distress_chs() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def financial_distress_chs():
     """
     Compute CHS (2008) failure probability.
 
@@ -42,46 +39,28 @@ def financial_distress_chs() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     Returns:
         (time, ticker, failure_probability) arrays
     """
-    time_d, ticker, close = load_data("daily", "close")
-    _, _, ret = load_data("daily", "return")
+    time, ticker, close = load_data("daily", "close", time_and_ticker=True)
+    ret = load_data("daily", "return")
 
     # shares outstanding
-    time_s, _, total_a = load_data("shares", "total_a")
+    total_a = load_data("shares", "total_a")
 
-    time_bs, _, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
-    _, _, total_equity = load_data("balance_sheet", "total_equity_mrq_0")
-    _, _, cash_equivalent = load_data("balance_sheet", "cash_equivalent_mrq_0")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
+    total_equity = load_data("balance_sheet", "total_equity_mrq_0")
+    cash_equivalent = load_data("balance_sheet", "cash_equivalent_mrq_0")
 
-    _, _, net_profit = load_data("income_statement", "net_profit_mrq_0")
+    net_profit = load_data("income_statement", "net_profit_mrq_0")
 
-    # Align to balance sheet time (quarterly data aligned to daily)
-    # Use the balance sheet timestamps as output
-    time_out = time_bs
-    n_time = len(time_out)
+    n_time = len(time)
     n_ticker = len(ticker)
 
-    # Create index mapping from balance sheet time to daily time
-    time_d_set = set(time_d)
-    daily_idx = []
-    for t in time_out:
-        if t in time_d_set:
-            daily_idx.append(np.where(time_d == t)[0][0])
-        else:
-            # Find closest earlier date
-            earlier = time_d[time_d <= t]
-            if len(earlier) > 0:
-                daily_idx.append(np.where(time_d == earlier[-1])[0][0])
-            else:
-                daily_idx.append(0)
-    daily_idx = np.array(daily_idx)
-
     # Get aligned close prices and shares
-    close_aligned = close[daily_idx, :]
+
     total_a_aligned = total_a  # Already on same time grid as balance sheet
 
     # Market equity = close * shares outstanding
-    market_equity = close_aligned * total_a_aligned
+    market_equity = close * total_a_aligned
 
     # Market value of total assets = book assets - book equity + market equity
     mva = total_assets - total_equity + market_equity
@@ -104,14 +83,14 @@ def financial_distress_chs() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     mb = market_equity / total_equity_safe
 
     # PRICE: log(price per share), capped at log(15) as in original paper
-    price = np.log(np.clip(close_aligned, 1e-8, None))
+    price = np.log(np.clip(close, 1e-8, None))
     price = np.minimum(price, np.log(15))
 
     # SIGMA: Standard deviation of daily returns (past 3 months ~63 trading days)
     # Compute rolling std for each stock
     sigma = np.full((n_time, n_ticker), np.nan)
     window = 63
-    for i, d_idx in enumerate(daily_idx):
+    for i, d_idx in enumerate(time):
         start_idx = max(0, d_idx - window + 1)
         if d_idx >= window - 1:
             sigma[i, :] = np.nanstd(ret[start_idx : d_idx + 1, :], axis=0)
@@ -120,7 +99,7 @@ def financial_distress_chs() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Without market index, we use cross-sectional mean as market proxy
     exret = np.full((n_time, n_ticker), np.nan)
     window_ex = 63
-    for i, d_idx in enumerate(daily_idx):
+    for i, d_idx in enumerate(time):
         start_idx = max(0, d_idx - window_ex + 1)
         if d_idx >= window_ex - 1:
             stock_ret = ret[start_idx : d_idx + 1, :]
@@ -151,7 +130,7 @@ def financial_distress_chs() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Failure probability (numerically stable sigmoid)
     failure_prob = np.where(chs >= 0, 1 / (1 + np.exp(-chs)), np.exp(chs) / (1 + np.exp(chs)))
 
-    return time_out, ticker, failure_prob
+    return failure_prob
 
 
 def financial_distress_1():
@@ -159,10 +138,7 @@ def financial_distress_1():
     return financial_distress_chs()
 
 
-# 2
-# lower subsequent returns -> high O-Score (bankruptcy probability)
-# Ohlson (1980) O-Score Model
-def financial_distress_oscore() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def financial_distress_oscore():
     """
     Compute Ohlson (1980) O-Score bankruptcy probability.
 
@@ -187,13 +163,13 @@ def financial_distress_oscore() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         (time, ticker, oscore_probability) arrays
     """
     # Load balance sheet data
-    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
-    _, _, total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
-    _, _, current_assets = load_data("balance_sheet", "current_assets_mrq_0")
-    _, _, current_liabilities = load_data("balance_sheet", "current_liabilities_mrq_0")
+    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0", time_and_ticker=True)
+    total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
+    current_assets = load_data("balance_sheet", "current_assets_mrq_0")
+    current_liabilities = load_data("balance_sheet", "current_liabilities_mrq_0")
 
     # Load income statement data
-    _, _, net_profit = load_data("income_statement", "net_profit_mrq_0")
+    net_profit = load_data("income_statement", "net_profit_mrq_0")
 
     n_time, n_ticker = total_assets.shape
 
@@ -266,9 +242,4 @@ def financial_distress_oscore() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         np.exp(oscore) / (1 + np.exp(oscore)),
     )
 
-    return time, ticker, oscore_prob
-
-
-def financial_distress_2():
-    """Alias for Ohlson O-Score bankruptcy probability model."""
-    return financial_distress_oscore()
+    return oscore_prob

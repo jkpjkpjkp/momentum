@@ -11,10 +11,10 @@ weighted average return on six portfolios in that month."""
 
 import numpy as np
 
-from ..main.utils import load_data
+from main.utils import load_data
 
 
-def momentum() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def momentum():
     """
     Compute momentum signal following Jegadeesh and Titman (1993).
 
@@ -26,11 +26,8 @@ def momentum() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         - Month -2 end: ~42 days ago
 
     High past returns predict high future returns.
-
-    Returns:
-        (time, ticker, momentum_signal) arrays
     """
-    time, ticker, ret = load_data("daily", "return")
+    ret = load_data("daily", "return")
 
     n_time, n_ticker = ret.shape
 
@@ -50,7 +47,7 @@ def momentum() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         cum_ret = np.nanprod(1 + period_ret, axis=0) - 1
         momentum_signal[i, :] = cum_ret
 
-    return time, ticker, momentum_signal
+    return momentum_signal
 
 
 if __name__ == "__main__":

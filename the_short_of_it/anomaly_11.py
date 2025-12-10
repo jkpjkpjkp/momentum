@@ -8,10 +8,10 @@ inventories scaled by the lagged book value of assets."""
 
 import numpy as np
 
-from ..main.utils import load_data
+from main.utils import load_data
 
 
-def investment_to_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def investment_to_assets():
     """
     Compute investment-to-assets following Titman, Wei, and Xie (2004).
 
@@ -22,15 +22,12 @@ def investment_to_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     - ΔInventory = Change in inventories
 
     Higher investment-to-assets predicts lower future returns.
-
-    Returns:
-        (time, ticker, investment_to_assets) arrays
     """
-    time, ticker, fixed_assets = load_data("balance_sheet", "fixed_assets_mrq_0")
-    _, _, fixed_assets_lag = load_data("balance_sheet", "fixed_assets_mrq_4")
-    _, _, inventory = load_data("balance_sheet", "inventory_mrq_0")
-    _, _, inventory_lag = load_data("balance_sheet", "inventory_mrq_4")
-    _, _, total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
+    fixed_assets = load_data("balance_sheet", "fixed_assets_mrq_0")
+    fixed_assets_lag = load_data("balance_sheet", "fixed_assets_mrq_4")
+    inventory = load_data("balance_sheet", "inventory_mrq_0")
+    inventory_lag = load_data("balance_sheet", "inventory_mrq_4")
+    total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
 
     # Replace NaN with 0 for inventory (some firms may not have inventory)
     inventory = np.nan_to_num(inventory, nan=0.0)
@@ -51,7 +48,7 @@ def investment_to_assets() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     # Investment-to-assets
     ia = investment / total_assets_lag_safe
 
-    return time, ticker, ia
+    return ia
 
 
 if __name__ == "__main__":

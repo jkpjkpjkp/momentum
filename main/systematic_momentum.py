@@ -96,36 +96,15 @@ def load_anomaly_set(
     # Create ticker lookup
     ticker_to_idx = {t: i for i, t in enumerate(reference_ticker)}
 
-    result = np.full((n_time, n_stocks, n_anomalies), np.nan, dtype=np.float64)
-
+    results = []
     for j, anomaly_func in enumerate(anomaly_list):
         print(f"  Loading anomaly {j+1}/{n_anomalies}: {anomaly_func.__name__}")
 
-        a_time, a_ticker, a_values = anomaly_func()
+        x = anomaly_func()
+        x = cross_sectional_standardize(x)
+        results.append(x)
 
-        # Align time: find matching indices
-        # Assume both are sorted in increasing order
-        time_to_idx = {t: i for i, t in enumerate(a_time)}
-
-        for t_idx, t in enumerate(reference_time):
-            if t not in time_to_idx:
-                continue
-            a_t_idx = time_to_idx[t]
-
-            for s_idx, ticker in enumerate(reference_ticker):
-                assert ticker in ticker_to_idx
-                # Find ticker in anomaly data
-                a_s_idx = np.where(a_ticker == ticker)[0]
-                if len(a_s_idx) == 0:
-                    continue
-                a_s_idx = a_s_idx[0]
-
-                result[t_idx, s_idx, j] = a_values[a_t_idx, a_s_idx]
-
-        # Standardize cross-sectionally
-        result[:, :, j] = cross_sectional_standardize(result[:, :, j])
-
-    return result
+    return np.stack(results, axis=2)
 
 
 def load_all_anomalies(
@@ -158,17 +137,15 @@ def load_all_anomalies(
     all_funcs = []
     all_names = []
 
-    if use_short:
-        print("Loading the_short_of_it anomalies...")
-        for func in short_anomalies:
-            all_funcs.append(func)
-            all_names.append(f"short_{func.__name__}")
+    print("Loading the_short_of_it anomalies...")
+    for func in short_anomalies:
+        all_funcs.append(func)
+        all_names.append(f"short_{func.__name__}")
 
-    if use_fm:
-        print("Loading factor_momentum anomalies...")
-        for name, func in fm_anomalies.items():
-            all_funcs.append(func)
-            all_names.append(f"fm_{name}")
+    print("Loading factor_momentum anomalies...")
+    for func in fm_anomalies:
+        all_funcs.append(func)
+        all_names.append(f"fm_{func.__name__}")
 
     anomalies = load_anomaly_set(all_funcs, reference_time, reference_ticker)
 
@@ -179,7 +156,7 @@ def run_cross_sectional_regression(
     returns: np.ndarray,
     characteristics: np.ndarray,
     use_inverse_variance_weights: bool = True,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+):
     """
     Run cross-sectional regression for each time period.
 
@@ -395,7 +372,7 @@ def compute_systematic_momentum(
 
     # Load reference data (daily returns)
     print("\n1. Loading daily returns...")
-    time, ticker, returns = load_data("daily", "return")
+    time, ticker, returns = load_data("daily", "return", time_and_ticker=True)
     print(f"   Time periods: {len(time):,}")
     print(f"   Stocks: {len(ticker):,}")
     print(f"   Returns shape: {returns.shape}")
