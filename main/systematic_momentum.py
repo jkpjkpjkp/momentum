@@ -55,7 +55,17 @@ def load_anomaly_set(anomaly_list: list[Callable]) -> np.ndarray:
     return np.stack(results, axis=2)
 
 
-def load_all_anomalies() -> tuple[np.ndarray, list[str]]:
+def load_all_anomalies(
+    min_valid_pct: float = 0.10,
+) -> tuple[np.ndarray, list[str]]:
+    """
+    Load and filter anomalies, removing those with insufficient valid data.
+
+    Parameters
+    ----------
+    min_valid_pct : float
+        Minimum percentage of valid (non-NaN) observations required (default 10%)
+    """
     all_funcs = []
     all_names = []
 
@@ -70,7 +80,25 @@ def load_all_anomalies() -> tuple[np.ndarray, list[str]]:
         all_names.append(f"fm_{func.__name__}")
 
     anomalies = load_anomaly_set(all_funcs)
-    return anomalies, all_names
+
+    # Filter out anomalies with insufficient valid data
+    n_factors = anomalies.shape[2]
+    valid_mask = []
+    filtered_names = []
+
+    for j in range(n_factors):
+        valid_pct = np.sum(~np.isnan(anomalies[:, :, j])) / anomalies[:, :, j].size
+        if valid_pct >= min_valid_pct:
+            valid_mask.append(j)
+            filtered_names.append(all_names[j])
+        else:
+            print(f"   Excluding {all_names[j]}: only {valid_pct*100:.1f}% valid data")
+
+    if len(valid_mask) < n_factors:
+        anomalies = anomalies[:, :, valid_mask]
+        print(f"   Kept {len(valid_mask)}/{n_factors} anomalies after filtering")
+
+    return anomalies, filtered_names
 
 
 def run_cross_sectional_regression(
@@ -285,25 +313,21 @@ def compute_systematic_momentum(
     print("Implementation of Li, Yuan & Zhou (2025)")
     print("=" * 60)
 
-    # Load reference data (daily returns)
     print("\n1. Loading daily returns...")
     time, ticker, returns = load_data("daily", "return", time_and_ticker=True)
     print(f"   Time periods: {len(time):,}")
     print(f"   Stocks: {len(ticker):,}")
     print(f"   Returns shape: {returns.shape}")
 
-    # Load and standardize anomalies
     print("\n2. Loading and standardizing anomalies...")
     anomalies, anomaly_names = load_all_anomalies()
     print(f"   Anomalies shape: {anomalies.shape}")
     print(f"   Anomaly names: {anomaly_names}")
 
-    # Run cross-sectional regression
     print("\n3. Running cross-sectional regressions...")
     alphas, thetas, residuals = run_cross_sectional_regression(returns, anomalies)
     print(f"   Valid theta estimates: {np.sum(~np.isnan(thetas[:, 0])):,} days")
 
-    # Compute systematic component
     print("\n4. Computing systematic component (SYS)...")
     sys = compute_systematic_component(anomalies, thetas)
     valid_sys = np.sum(~np.isnan(sys))
@@ -673,8 +697,7 @@ def compute_all_intraday_systematic_momentum(
     start_date: str = "2020-01-01",
     end_date: str = "2020-12-31",
 ) -> dict:
-    """
-    Compute systematic momentum for all 8 intraday periods.
+    """systematic momentum for all 8 intraday periods.
 
     Returns combined results and the aggregate portfolio.
     """
