@@ -6,8 +6,24 @@ Higher values indicate stronger exposure to the long side of the factor.
 """
 
 import numpy as np
+import h5py
 from pathlib import Path
-from main.utils import load_data
+from main.utils import load_data, DATA_DIR
+
+
+def _load_index_weights(ticker):
+    """Load index weights aligned to standard 5480 ticker list."""
+    _, std_ticker, _ = load_data("daily", "return", time_and_ticker=True)
+    path = DATA_DIR / "index_weights" / f"{ticker}.h5"
+    with h5py.File(path, "r") as f:
+        iw_ticker = f["ticker"][:]
+        values = f["values"][:3643, :]
+    ticker_to_idx = {t: i for i, t in enumerate(iw_ticker)}
+    aligned = np.full((3643, 5480), np.nan)
+    for i, t in enumerate(std_ticker):
+        if t in ticker_to_idx:
+            aligned[:, i] = values[:, ticker_to_idx[t]]
+    return aligned
 
 # -----------------------------------------------------------------------------
 # 1. Size (SMB) - Small Minus Big
@@ -178,9 +194,9 @@ def cashflow_to_price():
 # 11. Betting Against Beta (BAB)
 # -----------------------------------------------------------------------------
 def betting_against_beta():
-    """Market beta. Lower beta = long side of BAB."""
+    """(negative) beta. Lower beta = long side of BAB."""
     time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
-    mkt_weights = load_data("index_weights", "000300.XSHG")
+    mkt_weights = _load_index_weights("000300.XSHG")
 
     n_time, n_stocks = ret.shape
     beta = np.full((n_time, n_stocks), np.nan)
@@ -211,7 +227,7 @@ def betting_against_beta():
             cov = np.cov(sr[valid], mkt_ret[valid])[0, 1]
             beta[t, j] = cov / mkt_var
 
-    return -beta  # low beta = high exposure
+    return -beta
 
 
 # -----------------------------------------------------------------------------
@@ -220,7 +236,7 @@ def betting_against_beta():
 def residual_variance():
     """Idiosyncratic volatility from CAPM. Higher = long side (lottery demand)."""
     time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
-    mkt_weights = load_data("index_weights", "000300.XSHG")
+    mkt_weights = _load_index_weights("000300.XSHG")
 
     n_time, n_stocks = ret.shape
     resid_var = np.full((n_time, n_stocks), np.nan)
@@ -263,7 +279,7 @@ def residual_variance():
 # 13. Net Share Issues
 # -----------------------------------------------------------------------------
 def net_share_issues():
-    """12-month change in shares outstanding. Lower = buybacks (long side)."""
+    """(negative) 12-month change in shares outstanding. Lower = buybacks (long side)."""
     time, ticker, shares = load_data("shares", "total_a")
 
     n_time, n_stocks = shares.shape
@@ -283,7 +299,7 @@ def net_share_issues():
 # 14. Liquidity (Turnover)
 # -----------------------------------------------------------------------------
 def liquidity() -> np.ndarray:
-    """Average turnover. Higher = more liquid (long side)."""
+    """Average turnover."""
     time, ticker, volume = load_data("daily", "volume", time_and_ticker=True)
     shares = load_data("shares", "circulation_a")
 
