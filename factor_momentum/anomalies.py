@@ -1,4 +1,5 @@
 """
+TODO: fix the ugly numpy functions
 15 Anomalies from Ehsani & Linnainmaa (2022) "Factor Momentum and the Momentum Factor"
 
 Each function returns a (N_time, N_stocks) array of factor exposures (characteristics).
@@ -469,7 +470,6 @@ def quality_minus_junk():
     net_profit = load_data("income_statement", "net_profit_mrq_0")
     total_assets = load_data("balance_sheet", "total_assets_mrq_0")
     total_equity = load_data("balance_sheet", "total_equity_mrq_0")
-    total_liab = load_data("balance_sheet", "total_liabilities_mrq_0")
     ret = load_data("daily", "return")
 
     n_time, n_stocks = ret.shape

@@ -1,13 +1,5 @@
 """
 Systematic Momentum - Li, Yuan & Zhou (2025)
-
-Methodology:
-1. Cross-sectional regression at each period i:
-   RET_s,d,i = alpha_d,i + sum_j(C_s,d-1,j * theta_d,i,j) + epsilon_s,d,i
-   where C_s,d-1,j are standardized anomaly characteristics from day d-1
-2. SYS_s,d,i = sum_j(C_s,d-1,j * theta_hat_d,i,j) is the systematic component
-3. Trading: At each period i, sort stocks by SYS from period i-1,
-   go long top decile, short bottom decile
 """
 import numpy as np
 from typing import Callable
@@ -25,6 +17,98 @@ from .utils import (
 )
 
 N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)
+
+
+def to_bytes_list(tickers: list) -> list[bytes]:
+    """Convert list of tickers to bytes (parquet gives str, h5 gives bytes)."""
+    return [tk.encode() if isinstance(tk, str) else tk for tk in tickers]
+
+
+def build_regression_matrices(
+    tickers: list[bytes],
+    returns: np.ndarray,
+    ticker_to_idx: dict[bytes, int],
+    anomalies: np.ndarray,
+    char_t_idx: int,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Build X (characteristics) and y (returns) matrices for regression."""
+    y_list = []
+    X_list = []
+
+    for i, tk in enumerate(tickers):
+        if tk not in ticker_to_idx:
+            continue
+        s_idx = ticker_to_idx[tk]
+        char_values = anomalies[char_t_idx, s_idx, :]
+
+        if np.any(np.isnan(char_values)) or np.isnan(returns[i]):
+            continue
+
+        y_list.append(returns[i])
+        X_list.append(char_values)
+
+    if len(y_list) == 0:
+        return None, None
+
+    return np.array(y_list), np.array(X_list)
+
+
+def fit_ols_with_intercept(X: np.ndarray, y: np.ndarray, reg_lambda: float = 1e-8) -> np.ndarray:
+    """Fit OLS with intercept and regularization, return coefficients (excluding intercept)."""
+    X_aug = np.column_stack([np.ones(len(y)), X])
+    XtX = X_aug.T @ X_aug
+    Xty = X_aug.T @ y
+    reg = reg_lambda * np.eye(XtX.shape[0])
+    coeffs = np.linalg.solve(XtX + reg, Xty)
+    return coeffs[1:]
+
+
+def compute_sys_scores(
+    tickers: list[bytes],
+    ticker_to_idx: dict[bytes, int],
+    anomalies: np.ndarray,
+    char_t_idx: int,
+    theta: np.ndarray,
+) -> dict[bytes, float]:
+    """Compute SYS scores for all stocks: SYS = characteristics @ theta."""
+    sys_scores = {}
+    for tk in tickers:
+        if tk not in ticker_to_idx:
+            continue
+        s_idx = ticker_to_idx[tk]
+        char_values = anomalies[char_t_idx, s_idx, :]
+        if not np.any(np.isnan(char_values)):
+            sys_scores[tk] = np.dot(char_values, theta)
+    return sys_scores
+
+
+def compute_portfolio_returns(
+    tickers: list[bytes],
+    returns: np.ndarray,
+    scores: dict[bytes, float],
+    n_portfolios: int,
+) -> list[float] | None:
+    """Sort stocks by scores into portfolios and compute average returns."""
+    valid_stocks = []
+    for i, tk in enumerate(tickers):
+        if tk in scores and not np.isnan(returns[i]):
+            valid_stocks.append((tk, scores[tk], returns[i]))
+
+    if len(valid_stocks) < n_portfolios * 5:
+        return None
+
+    valid_stocks.sort(key=lambda x: x[1])
+
+    n_per_port = len(valid_stocks) // n_portfolios
+    port_ret = []
+    for p in range(n_portfolios):
+        start_idx = p * n_per_port
+        end_idx = start_idx + n_per_port if p < n_portfolios - 1 else len(valid_stocks)
+        stocks_in_port = valid_stocks[start_idx:end_idx]
+        avg_ret = np.mean([s[2] for s in stocks_in_port])
+        port_ret.append(avg_ret)
+
+    return port_ret
 
 
 def cross_sectional_standardize(values: np.ndarray) -> np.ndarray:
@@ -47,6 +131,7 @@ def load_anomaly_set(anomaly_list: list[Callable]) -> np.ndarray:
         x = anomaly_func()
         x = cross_sectional_standardize(x)
         results.append(x)
+    breakpoint()
     return np.stack(results, axis=2)
 
 
@@ -99,17 +184,10 @@ def compute_intraday_systematic_momentum_by_period(
     n_portfolios: int = 10,
 ) -> dict:
     """
-    Systematic momentum with period-specific regressions.
-
-    Following Li, Yuan & Zhou (2025): run separate cross-sectional regression
-    for each intraday period i, as factor returns (theta) vary by time-of-day.
-
     RET_s,d,i = alpha_d,i + sum_j(C_s,d-1,j * theta_d,i,j) + epsilon_s,d,i
     """
-    print("=" * 70)
     print("INTRADAY SYSTEMATIC MOMENTUM - Period-Specific Regressions")
     print("Following Li, Yuan & Zhou (2025)")
-    print("=" * 70)
 
     # Load daily characteristics
     print("\n1. Loading daily data...")
@@ -162,38 +240,17 @@ def compute_intraday_systematic_momentum_by_period(
             if period_data.height == 0:
                 continue
 
-            tickers_period = period_data["order_book_id"].to_list()
+            tickers_period = to_bytes_list(period_data["order_book_id"].to_list())
             returns_period = period_data["return"].to_numpy()
 
-            # Build X (characteristics) and y (returns) matrices
-            y_list = []
-            X_list = []
+            y, X = build_regression_matrices(
+                tickers_period, returns_period, ticker_to_idx, anomalies, char_t_idx
+            )
 
-            for i, tk in enumerate(tickers_period):
-                tk_bytes = tk if isinstance(tk, bytes) else tk.encode()
-                s_idx = ticker_to_idx[tk_bytes]
-                char_values = anomalies[char_t_idx, s_idx, :]
-
-                if np.any(np.isnan(char_values)) or np.isnan(returns_period[i]):
-                    continue
-
-                y_list.append(returns_period[i])
-                X_list.append(char_values)
-
-            if len(y_list) < n_factors + 10:
+            if y is None or len(y) < n_factors + 10:
                 continue
 
-            y = np.array(y_list)
-            X = np.array(X_list)
-
-            # OLS: y = alpha + X @ theta + epsilon
-            X_with_intercept = np.column_stack([np.ones(len(y)), X])
-
-            XtX = X_with_intercept.T @ X_with_intercept
-            Xty = X_with_intercept.T @ y
-            reg = 1e-8 * np.eye(XtX.shape[0])
-            coeffs = np.linalg.solve(XtX + reg, Xty)
-            thetas_by_period[period][date] = coeffs[1:]
+            thetas_by_period[period][date] = fit_ols_with_intercept(X, y)
 
     print("\n5. Computing SYS and creating portfolios...")
     # Trading
@@ -226,48 +283,19 @@ def compute_intraday_systematic_momentum_by_period(
             if period_data.height == 0:
                 continue
 
-            tickers_period = period_data["order_book_id"].to_list()
+            tickers_period = to_bytes_list(period_data["order_book_id"].to_list())
             returns_period = period_data["return"].to_numpy()
 
-            # Compute SYS for all stocks
-            current_sys = {}
-            for i, tk in enumerate(tickers_period):
-                tk_str = tk.decode() if isinstance(tk, bytes) else tk
-                tk_bytes = tk if isinstance(tk, bytes) else tk.encode()
-
-                if tk_bytes not in ticker_to_idx:
-                    continue
-
-                s_idx = ticker_to_idx[tk_bytes]
-                char_values = anomalies[char_t_idx, s_idx, :]
-
-                if not np.any(np.isnan(char_values)):
-                    current_sys[tk_str] = np.dot(char_values, theta)
+            current_sys = compute_sys_scores(
+                tickers_period, ticker_to_idx, anomalies, char_t_idx, theta
+            )
 
             # Trading: sort by previous period's SYS
             if prev_sys is not None and len(prev_sys) > n_portfolios * 5:
-                valid_stocks = []
-                for i, tk in enumerate(tickers_period):
-                    tk_str = tk.decode() if isinstance(tk, bytes) else tk
-                    if tk_str in prev_sys and not np.isnan(returns_period[i]):
-                        valid_stocks.append((tk_str, prev_sys[tk_str], returns_period[i]))
-
-                if len(valid_stocks) >= n_portfolios * 5:
-                    valid_stocks.sort(key=lambda x: x[1])
-
-                    n_per_port = len(valid_stocks) // n_portfolios
-                    port_ret = []
-                    for p in range(n_portfolios):
-                        start_idx = p * n_per_port
-                        end_idx = (
-                            start_idx + n_per_port
-                            if p < n_portfolios - 1
-                            else len(valid_stocks)
-                        )
-                        stocks_in_port = valid_stocks[start_idx:end_idx]
-                        avg_ret = np.mean([s[2] for s in stocks_in_port])
-                        port_ret.append(avg_ret)
-
+                port_ret = compute_portfolio_returns(
+                    tickers_period, returns_period, prev_sys, n_portfolios
+                )
+                if port_ret is not None:
                     portfolio_returns_by_period[period].append({
                         "date": date,
                         "portfolio_returns": port_ret,
@@ -277,11 +305,8 @@ def compute_intraday_systematic_momentum_by_period(
             prev_sys = current_sys
 
     # Print results
-    print("\n" + "=" * 70)
     print("SYSTEMATIC MOMENTUM RESULTS BY INTRADAY PERIOD")
-    print("=" * 70)
     print(f"{'Period':<20} {'N Days':>8} {'Ann Ret':>10} {'Ann Vol':>10} {'Sharpe':>8}")
-    print("-" * 70)
 
     all_ls_returns = []
 
@@ -307,7 +332,6 @@ def compute_intraday_systematic_momentum_by_period(
 
     # Aggregate statistics
     if all_ls_returns:
-        print("-" * 70)
         ann_factor = 252 * N_INTRADAY_PERIODS
         agg_mean = np.mean(all_ls_returns) * ann_factor
         agg_std = np.std(all_ls_returns) * np.sqrt(ann_factor)
@@ -327,6 +351,6 @@ def compute_intraday_systematic_momentum_by_period(
 
 if __name__ == "__main__":
     results = compute_intraday_systematic_momentum_by_period(
-        start_date="2020-01-01",
-        end_date="2024-12-31",
+        start_date="2018-01-01",
+        end_date="2022-12-31",
     )

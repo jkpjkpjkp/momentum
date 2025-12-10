@@ -87,7 +87,7 @@ def financial_distress_chs():
     sigma = np.full((n_time, n_ticker), np.nan)
     window = 63
     for i in range(window - 1, n_time):
-        sigma[i, :] = np.nanstd(ret[i - window + 1 : i + 1, :], axis=0)
+        sigma[i, :] = np.nanstd(ret[i - window + 1 : i + 1, :], axis=0)   # TODO: RuntimeWarning: Degrees of freedom <= 0 for slice.
 
     # EXRETAVG: Excess return vs market (simplified: use mean return as proxy)
     # Without market index, we use cross-sectional mean as market proxy
