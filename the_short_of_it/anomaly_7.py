@@ -8,9 +8,7 @@ during high-sentiment periods. The portfolios we use are ranked on cumulative
 returns from month-7 to month-2, and the holding period for each portfolio
 is six months. That is, a momentum return for a given month is the equally
 weighted average return on six portfolios in that month."""
-
 import numpy as np
-
 from main.utils import load_data
 
 
@@ -51,9 +49,7 @@ def momentum():
 
 
 if __name__ == "__main__":
-    time, ticker, mom = momentum()
-    print(f"Time periods: {len(time)}")
-    print(f"Stocks: {len(ticker)}")
+    mom = momentum()
     print(f"Momentum shape: {mom.shape}")
     print(f"Momentum range: [{np.nanmin(mom):.4f}, {np.nanmax(mom):.4f}]")
     print(f"Momentum mean: {np.nanmean(mom):.4f}")

@@ -16,11 +16,11 @@ def load_data(category: str, field: str, time_and_ticker=False):
     if time.shape[0] > 3643:
         time = time[:3643]
         values = values[:3643, :]
+    assert time.shape == (3643,)
+    assert ticker.shape == (5480,)
     if time_and_ticker:
         return time, ticker, values
     else:
-        assert time.shape == (3643,)
-        assert ticker.shape == (5480,)
         return values
 
 

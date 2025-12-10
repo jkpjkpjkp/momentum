@@ -67,9 +67,7 @@ def total_accruals():
 
 
 if __name__ == "__main__":
-    time, ticker, accruals = total_accruals()
-    print(f"Time points: {len(time)}")
-    print(f"Tickers: {len(ticker)}")
+    accruals = total_accruals()
     print(f"Accruals shape: {accruals.shape}")
     print(f"Sample accruals (first 5 stocks, last date):")
     print(f"  {accruals[-1, :5]}")

@@ -5,15 +5,13 @@ initial underreactions to the overinvestment caused by managers' empire-
 building behavior. Here, investment-to-assets is measured as the annual
 change in gross property, plant, and equipment plus the annual change in
 inventories scaled by the lagged book value of assets."""
-
 import numpy as np
-
 from main.utils import load_data
 
 
 def investment_to_assets():
-    """
-    Compute investment-to-assets following Titman, Wei, and Xie (2004).
+    """Investment-to-assets
+    (Titman, Wei, and Xie (2004).)
 
     I/A = (ΔPPE + ΔInventory) / Total Assets_{t-1}
 
@@ -23,8 +21,8 @@ def investment_to_assets():
 
     Higher investment-to-assets predicts lower future returns.
     """
-    fixed_assets = load_data("balance_sheet", "fixed_assets_mrq_0")
-    fixed_assets_lag = load_data("balance_sheet", "fixed_assets_mrq_4")
+    fixed_assets = load_data("balance_sheet", "total_fixed_assets_mrq_0")
+    fixed_assets_lag = load_data("balance_sheet", "total_fixed_assets_mrq_4")
     inventory = load_data("balance_sheet", "inventory_mrq_0")
     inventory_lag = load_data("balance_sheet", "inventory_mrq_4")
     total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
@@ -42,19 +40,12 @@ def investment_to_assets():
     # Total investment
     investment = delta_ppe + delta_inv
 
-    # Avoid division by zero
     total_assets_lag_safe = np.where(total_assets_lag > 0, total_assets_lag, np.nan)
-
-    # Investment-to-assets
-    ia = investment / total_assets_lag_safe
-
-    return ia
+    return investment / total_assets_lag_safe
 
 
 if __name__ == "__main__":
-    time, ticker, ia = investment_to_assets()
-    print(f"Time periods: {len(time)}")
-    print(f"Stocks: {len(ticker)}")
+    ia = investment_to_assets()
     print(f"Investment-to-assets shape: {ia.shape}")
     print(f"Investment-to-assets range: [{np.nanmin(ia):.4f}, {np.nanmax(ia):.4f}]")
     print(f"Investment-to-assets mean: {np.nanmean(ia):.4f}")

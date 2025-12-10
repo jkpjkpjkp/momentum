@@ -142,7 +142,7 @@ def profitability():
 # -----------------------------------------------------------------------------
 def investment():
     """Asset growth. Lower = conservative investment (long side)."""
-    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0")
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
     total_assets_lag = load_data("balance_sheet", "total_assets_mrq_4")
     asset_growth = (total_assets - total_assets_lag) / total_assets_lag
     return -asset_growth  # Negative: low growth = high exposure

@@ -52,17 +52,12 @@ def net_operating_assets():
 
     noa_raw = operating_assets - operating_liabilities
 
-    # Scale by total assets
     total_assets_safe = np.where(total_assets > 0, total_assets, np.nan)
-    noa = noa_raw / total_assets_safe
-
-    return noa
+    return noa_raw / total_assets_safe
 
 
 if __name__ == "__main__":
-    time, ticker, noa = net_operating_assets()
-    print(f"Time periods: {len(time)}")
-    print(f"Stocks: {len(ticker)}")
+    noa = net_operating_assets()
     print(f"NOA shape: {noa.shape}")
     print(f"NOA range: [{np.nanmin(noa):.4f}, {np.nanmax(noa):.4f}]")
     print(f"NOA mean: {np.nanmean(noa):.4f}")
