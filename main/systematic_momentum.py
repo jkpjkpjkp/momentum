@@ -69,10 +69,7 @@ def load_anomaly_set(
     return np.stack(results, axis=2)
 
 
-def load_all_anomalies(
-    use_short: bool = True,
-    use_fm: bool = True,
-) -> tuple[np.ndarray, list[str]]:
+def load_all_anomalies() -> tuple[np.ndarray, list[str]]:
     """
     Load all anomalies from selected sets.
 
@@ -82,10 +79,6 @@ def load_all_anomalies(
         Daily time grid
     reference_ticker : np.ndarray
         Stock ticker array
-    use_short : bool
-        Include the_short_of_it anomalies
-    use_fm : bool
-        Include factor_momentum anomalies
 
     Returns
     -------
@@ -296,8 +289,6 @@ def create_decile_portfolios(
 
 
 def compute_systematic_momentum(
-    use_short: bool = True,
-    use_fm: bool = True,
     n_portfolios: int = 10,
 ) -> dict:
     """
@@ -305,10 +296,6 @@ def compute_systematic_momentum(
 
     Parameters
     ----------
-    use_short : bool
-        Include the_short_of_it anomalies
-    use_fm : bool
-        Include factor_momentum anomalies
     n_portfolios : int
         Number of portfolios for sorting
 
@@ -339,9 +326,7 @@ def compute_systematic_momentum(
 
     # Load and standardize anomalies
     print("\n2. Loading and standardizing anomalies...")
-    anomalies, anomaly_names = load_all_anomalies(
-        use_short=use_short, use_fm=use_fm
-    )
+    anomalies, anomaly_names = load_all_anomalies()
     print(f"   Anomalies shape: {anomalies.shape}")
     print(f"   Anomaly names: {anomaly_names}")
 
@@ -415,7 +400,7 @@ def analyze_factor_returns(thetas: np.ndarray, names: list[str]) -> None:
 
 if __name__ == "__main__":
     # Run systematic momentum analysis
-    results = compute_systematic_momentum(use_short=True, use_fm=True)
+    results = compute_systematic_momentum()
 
     # Analyze factor returns
     analyze_factor_returns(results["thetas"], results["anomaly_names"])
@@ -609,8 +594,6 @@ def compute_intraday_systematic_momentum(
     start_date: str = "2020-01-01",
     end_date: str = "2020-12-31",
     period: int = 1,
-    use_short: bool = True,
-    use_fm: bool = True,
     n_portfolios: int = 10,
 ) -> dict:
     """
@@ -624,10 +607,6 @@ def compute_intraday_systematic_momentum(
         End date in 'YYYY-MM-DD' format
     period : int
         Intraday period (1-8)
-    use_short : bool
-        Include the_short_of_it anomalies
-    use_fm : bool
-        Include factor_momentum anomalies
     n_portfolios : int
         Number of portfolios for sorting
 
@@ -648,9 +627,7 @@ def compute_intraday_systematic_momentum(
     # Load daily characteristics
     print("\n2. Loading daily characteristics...")
     time, ticker, _ = load_data("daily", "return", time_and_ticker=True)
-    anomalies, anomaly_names = load_all_anomalies(
-        use_short=use_short, use_fm=use_fm
-    )
+    anomalies, anomaly_names = load_all_anomalies()
     print(f"   Anomalies: {len(anomaly_names)}")
 
     # Load intraday returns for this period
@@ -741,8 +718,6 @@ def compute_intraday_systematic_momentum(
 def compute_all_intraday_systematic_momentum(
     start_date: str = "2020-01-01",
     end_date: str = "2020-12-31",
-    use_short: bool = True,
-    use_fm: bool = True,
 ) -> dict:
     """
     Compute systematic momentum for all 8 intraday periods.
@@ -761,8 +736,6 @@ def compute_all_intraday_systematic_momentum(
             start_date=start_date,
             end_date=end_date,
             period=period,
-            use_short=use_short,
-            use_fm=use_fm,
         )
         all_results[period] = result
 
