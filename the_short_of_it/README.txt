@@ -1,0 +1,1 @@
+Stambaugh RF, Yu J, Yuan Y (2012) The short of it: Investor sentiment and anomalies
