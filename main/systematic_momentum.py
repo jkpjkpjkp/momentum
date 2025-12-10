@@ -1,5 +1,4 @@
-"""
-Systematic Momentum - Implementation of Li, Yuan & Zhou (2025)
+"""Systematic Momentum - Li, Yuan & Zhou (2025)
 
 Methodology (adapted for Chinese market with 8 intraday periods):
 1. Intraday periods: 8 half-hour intervals (10:00-15:00 with lunch break)
@@ -18,7 +17,6 @@ Uses two anomaly sets:
 
 import numpy as np
 from typing import Callable
-from datetime import datetime
 import polars as pl
 
 # Import anomaly sets
@@ -35,19 +33,7 @@ from .utils import (
 
 
 def cross_sectional_standardize(values: np.ndarray) -> np.ndarray:
-    """
-    Standardize values cross-sectionally (each row has mean=0, std=1).
-
-    Parameters
-    ----------
-    values : np.ndarray
-        (N_time, N_stocks) array of raw values
-
-    Returns
-    -------
-    np.ndarray
-        (N_time, N_stocks) standardized values (z-scores)
-    """
+    """Standardize values cross-sectionally (each row has mean=0, std=1)."""
     result = np.full_like(values, np.nan, dtype=np.float64)
 
     for t in range(values.shape[0]):
@@ -69,32 +55,8 @@ def cross_sectional_standardize(values: np.ndarray) -> np.ndarray:
 
 def load_anomaly_set(
     anomaly_list: list[Callable],
-    reference_time: np.ndarray,
-    reference_ticker: np.ndarray,
 ) -> np.ndarray:
-    """
-    Load and align a set of anomalies to reference time/ticker grid.
-
-    Parameters
-    ----------
-    anomaly_list : list of callables
-        Each callable returns (time, ticker, values)
-    reference_time : np.ndarray
-        Reference time grid to align to
-    reference_ticker : np.ndarray
-        Reference ticker grid to align to
-
-    Returns
-    -------
-    np.ndarray
-        (N_time, N_stocks, N_anomalies) array of standardized anomaly values
-    """
-    n_time = len(reference_time)
-    n_stocks = len(reference_ticker)
     n_anomalies = len(anomaly_list)
-
-    # Create ticker lookup
-    ticker_to_idx = {t: i for i, t in enumerate(reference_ticker)}
 
     results = []
     for j, anomaly_func in enumerate(anomaly_list):
@@ -108,8 +70,6 @@ def load_anomaly_set(
 
 
 def load_all_anomalies(
-    reference_time: np.ndarray,
-    reference_ticker: np.ndarray,
     use_short: bool = True,
     use_fm: bool = True,
 ) -> tuple[np.ndarray, list[str]]:
@@ -147,7 +107,7 @@ def load_all_anomalies(
         all_funcs.append(func)
         all_names.append(f"fm_{func.__name__}")
 
-    anomalies = load_anomaly_set(all_funcs, reference_time, reference_ticker)
+    anomalies = load_anomaly_set(all_funcs)
 
     return anomalies, all_names
 
@@ -380,7 +340,7 @@ def compute_systematic_momentum(
     # Load and standardize anomalies
     print("\n2. Loading and standardizing anomalies...")
     anomalies, anomaly_names = load_all_anomalies(
-        time, ticker, use_short=use_short, use_fm=use_fm
+        use_short=use_short, use_fm=use_fm
     )
     print(f"   Anomalies shape: {anomalies.shape}")
     print(f"   Anomaly names: {anomaly_names}")
@@ -687,9 +647,9 @@ def compute_intraday_systematic_momentum(
 
     # Load daily characteristics
     print("\n2. Loading daily characteristics...")
-    time, ticker, _ = load_data("daily", "return")
+    time, ticker, _ = load_data("daily", "return", time_and_ticker=True)
     anomalies, anomaly_names = load_all_anomalies(
-        time, ticker, use_short=use_short, use_fm=use_fm
+        use_short=use_short, use_fm=use_fm
     )
     print(f"   Anomalies: {len(anomaly_names)}")
 
