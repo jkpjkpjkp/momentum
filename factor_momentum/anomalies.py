@@ -194,40 +194,98 @@ def cashflow_to_price():
 # -----------------------------------------------------------------------------
 # 11. Betting Against Beta (BAB)
 # -----------------------------------------------------------------------------
-def betting_against_beta():
-    """(negative) beta. Lower beta = long side of BAB."""
-    time, ticker, ret = load_data("daily", "return", time_and_ticker=True)
-    mkt_weights = _load_index_weights("000300.XSHG")
-
+@njit(parallel=True, cache=True)
+def _betting_against_beta_kernel(ret, mkt_weights, lookback: int, min_valid: int):
     n_time, n_stocks = ret.shape
     beta = np.full((n_time, n_stocks), np.nan)
 
-    lookback = 252  # 12 months
+    for t in prange(lookback, n_time):
+        # Normalize weights
+        weights = mkt_weights[t, :].copy()
+        weight_sum = 0.0
+        for i in range(n_stocks):
+            w = weights[i]
+            if np.isnan(w) or w == 0:
+                weights[i] = 0.0
+            else:
+                weight_sum += w
 
-    for t in range(lookback, n_time):
-        # Market return as weighted average of constituent returns
-        weights = mkt_weights[t, :]
-        valid_weights = np.where(np.isnan(weights) | (weights == 0), 0, weights)
-        if valid_weights.sum() == 0:
+        if weight_sum == 0:
             continue
-        valid_weights = valid_weights / valid_weights.sum()
 
-        stock_ret = ret[t - lookback : t, :]
-        mkt_ret = np.nansum(stock_ret * valid_weights, axis=1)
+        for i in range(n_stocks):
+            weights[i] /= weight_sum
 
-        # Compute beta for each stock
-        mkt_var = np.var(mkt_ret)
+        # Compute market return for lookback window
+        mkt_ret = np.zeros(lookback)
+        for day in range(lookback):
+            for j in range(n_stocks):
+                sr = ret[t - lookback + day, j]
+                if not np.isnan(sr):
+                    mkt_ret[day] += sr * weights[j]
+
+        # Market variance
+        mkt_mean = 0.0
+        for day in range(lookback):
+            mkt_mean += mkt_ret[day]
+        mkt_mean /= lookback
+
+        mkt_var = 0.0
+        for day in range(lookback):
+            diff = mkt_ret[day] - mkt_mean
+            mkt_var += diff * diff
+        mkt_var /= lookback
+
         if mkt_var == 0:
             continue
 
+        # Compute beta for each stock
         for j in range(n_stocks):
-            sr = stock_ret[:, j]
-            valid = ~np.isnan(sr)
-            if valid.sum() < 60:
-                continue
-            cov = np.cov(sr[valid], mkt_ret[valid])[0, 1]
-            beta[t, j] = cov / mkt_var
+            # Count valid observations and compute stock mean
+            valid_count = 0
+            stock_mean = 0.0
+            mkt_mean_valid = 0.0
+            for day in range(lookback):
+                sr = ret[t - lookback + day, j]
+                if not np.isnan(sr):
+                    valid_count += 1
+                    stock_mean += sr
+                    mkt_mean_valid += mkt_ret[day]
 
+            if valid_count < min_valid:
+                continue
+
+            stock_mean /= valid_count
+            mkt_mean_valid /= valid_count
+
+            # Compute covariance
+            cov = 0.0
+            for day in range(lookback):
+                sr = ret[t - lookback + day, j]
+                if not np.isnan(sr):
+                    cov += (sr - stock_mean) * (mkt_ret[day] - mkt_mean_valid)
+            cov /= valid_count
+
+            # Compute market variance on valid days only
+            mkt_var_valid = 0.0
+            for day in range(lookback):
+                sr = ret[t - lookback + day, j]
+                if not np.isnan(sr):
+                    diff = mkt_ret[day] - mkt_mean_valid
+                    mkt_var_valid += diff * diff
+            mkt_var_valid /= valid_count
+
+            if mkt_var_valid > 0:
+                beta[t, j] = cov / mkt_var_valid
+
+    return beta
+
+
+def betting_against_beta():
+    """(negative) beta. Lower beta = long side of BAB."""
+    _, _, ret = load_data("daily", "return", time_and_ticker=True)
+    mkt_weights = _load_index_weights("000300.XSHG")
+    beta = _betting_against_beta_kernel(ret, mkt_weights, lookback=252, min_valid=60)
     return -beta
 
 
@@ -235,7 +293,7 @@ def betting_against_beta():
 # 12. Residual Variance (Idiosyncratic Volatility)
 # -----------------------------------------------------------------------------
 @njit(parallel=True, cache=True)
-def _residual_variance_kernel(ret, mkt_weights, lookback, min_valid):
+def _residual_variance_kernel(ret, mkt_weights, lookback: int, min_valid):
     n_time, n_stocks = ret.shape
     resid_var = np.full((n_time, n_stocks), np.nan)
 
@@ -388,18 +446,16 @@ def liquidity() -> np.ndarray:
     volume = load_data("daily", "volume")
     shares = load_data("shares", "circulation_a")
 
-    n_time, n_stocks = volume.shape
-    turnover = np.full((n_time, n_stocks), np.nan)
-
+    turnover = []
     lookback = 21  # 1 month average
-
+    n_time = volume.shape[0]
     for t in range(lookback, n_time):
         vol = volume[t - lookback : t, :]
         shr = shares[t, :]  # Use current float shares
         avg_vol = np.nanmean(vol, axis=0)
-        turnover[t, :] = avg_vol / shr
+        turnover.append(avg_vol / shr)
 
-    return turnover
+    return np.array(turnover)
 
 
 # -----------------------------------------------------------------------------

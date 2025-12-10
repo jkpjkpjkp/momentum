@@ -21,9 +21,6 @@ market, stock volatility, relative size to the Standard and
 Poor’s (S&P) 500, and cumulative excess return relative to
 S&P 500."""
 import numpy as np
-import h5py
-from pathlib import Path
-
 from main.utils import load_data
 
 
@@ -37,9 +34,9 @@ def financial_distress_chs():
     P(failure) = exp(CHS) / (1 + exp(CHS))
 
     Returns:
-        (time, ticker, failure_probability) arrays
+        failure_probability array
     """
-    time, ticker, close = load_data("daily", "close", time_and_ticker=True)
+    close = load_data("daily", "close")
     ret = load_data("daily", "return")
 
     # shares outstanding
@@ -52,8 +49,7 @@ def financial_distress_chs():
 
     net_profit = load_data("income_statement", "net_profit_mrq_0")
 
-    n_time = len(time)
-    n_ticker = len(ticker)
+    n_time, n_ticker = close.shape
 
     # Get aligned close prices and shares
 
@@ -90,22 +86,18 @@ def financial_distress_chs():
     # Compute rolling std for each stock
     sigma = np.full((n_time, n_ticker), np.nan)
     window = 63
-    for i, d_idx in enumerate(time):
-        start_idx = max(0, d_idx - window + 1)
-        if d_idx >= window - 1:
-            sigma[i, :] = np.nanstd(ret[start_idx : d_idx + 1, :], axis=0)
+    for i in range(window - 1, n_time):
+        sigma[i, :] = np.nanstd(ret[i - window + 1 : i + 1, :], axis=0)
 
     # EXRETAVG: Excess return vs market (simplified: use mean return as proxy)
     # Without market index, we use cross-sectional mean as market proxy
     exret = np.full((n_time, n_ticker), np.nan)
     window_ex = 63
-    for i, d_idx in enumerate(time):
-        start_idx = max(0, d_idx - window_ex + 1)
-        if d_idx >= window_ex - 1:
-            stock_ret = ret[start_idx : d_idx + 1, :]
-            market_ret = np.nanmean(stock_ret, axis=1, keepdims=True)
-            excess = np.log(1 + stock_ret) - np.log(1 + market_ret)
-            exret[i, :] = np.nanmean(excess, axis=0)
+    for i in range(window_ex - 1, n_time):
+        stock_ret = ret[i - window_ex + 1 : i + 1, :]
+        market_ret = np.nanmean(stock_ret, axis=1, keepdims=True)
+        excess = np.log(1 + stock_ret) - np.log(1 + market_ret)
+        exret[i, :] = np.nanmean(excess, axis=0)
 
     # RSIZE: log(firm market cap) - log(market total cap)
     # Use cross-sectional percentile as proxy
@@ -114,7 +106,6 @@ def financial_distress_chs():
         np.clip(total_market_cap, 1e-8, None)
     )
 
-    # CHS score
     chs = (
         -9.16
         - 20.26 * nimta
@@ -131,11 +122,6 @@ def financial_distress_chs():
     failure_prob = np.where(chs >= 0, 1 / (1 + np.exp(-chs)), np.exp(chs) / (1 + np.exp(chs)))
 
     return failure_prob
-
-
-def financial_distress_1():
-    """Alias for CHS failure probability model."""
-    return financial_distress_chs()
 
 
 def financial_distress_oscore():
@@ -160,10 +146,10 @@ def financial_distress_oscore():
     P(bankruptcy) = exp(O) / (1 + exp(O))
 
     Returns:
-        (time, ticker, oscore_probability) arrays
+        oscore_probability array
     """
     # Load balance sheet data
-    time, ticker, total_assets = load_data("balance_sheet", "total_assets_mrq_0", time_and_ticker=True)
+    total_assets = load_data("balance_sheet", "total_assets_mrq_0")
     total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
     current_assets = load_data("balance_sheet", "current_assets_mrq_0")
     current_liabilities = load_data("balance_sheet", "current_liabilities_mrq_0")

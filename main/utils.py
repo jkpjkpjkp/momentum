@@ -40,18 +40,6 @@ INTRADAY_PERIODS = [
 ]
 
 def load_intraday_data(date: str) -> "pl.DataFrame":
-    """Load intraday 30-min bar data for a single day.
-
-    Parameters
-    ----------
-    date : str
-        Date in format 'YYYY-MM-DD'
-
-    Returns
-    -------
-    pl.DataFrame with columns: open, close, high, low, volume, order_book_id, datetime
-    """
-
     path = DATA_RAW_DIR / "intra_30min" / f"{date}.parquet"
     return pl.read_parquet(path)
 
@@ -65,7 +53,6 @@ def compute_intraday_returns(df: "pl.DataFrame") -> "pl.DataFrame":
     where period is 1-8 for intraday periods
     """
 
-    # Sort by ticker and time
     df = df.sort(["order_book_id", "datetime"])
 
     # Compute return = (close - open) / open for each bar
