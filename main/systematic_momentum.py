@@ -614,35 +614,24 @@ def compute_intraday_systematic_momentum(
     -------
     dict with results
     """
-    print("=" * 60)
     print(f"INTRADAY SYSTEMATIC MOMENTUM - Period {period}")
     print(f"({INTRADAY_PERIODS[period-1]} bar)")
-    print("=" * 60)
 
-    # Get available dates
     all_dates = get_available_dates()
     dates = [d for d in all_dates if start_date <= d <= end_date]
-    print(f"\n1. Date range: {dates[0]} to {dates[-1]} ({len(dates)} days)")
-
-    # Load daily characteristics
-    print("\n2. Loading daily characteristics...")
     time, ticker, _ = load_data("daily", "return", time_and_ticker=True)
     anomalies, anomaly_names = load_all_anomalies()
-    print(f"   Anomalies: {len(anomaly_names)}")
 
-    # Load intraday returns for this period
     print(f"\n3. Loading intraday returns for period {period}...")
     returns_data = load_intraday_returns_for_period(dates, period)
     print(f"   Days with data: {len(returns_data)}")
 
-    # Run cross-sectional regression
     print("\n4. Running cross-sectional regressions...")
     thetas, sys_values = run_intraday_cross_sectional_regression(
         returns_data, anomalies, time, ticker
     )
     print(f"   Valid theta estimates: {len(thetas)} days")
 
-    # Create portfolios sorted by lagged SYS
     print("\n5. Creating decile portfolios...")
     portfolio_returns = []
 
@@ -697,9 +686,7 @@ def compute_intraday_systematic_momentum(
         ls_std = np.std(ls_returns) * np.sqrt(252 * N_INTRADAY_PERIODS)
         ls_sharpe = ls_mean / ls_std if ls_std > 0 else np.nan
 
-        print("\n" + "=" * 60)
         print(f"SYSTEMATIC MOMENTUM RESULTS - Period {period}")
-        print("=" * 60)
         print(f"   Trading days: {len(portfolio_returns)}")
         print(f"   Annualized Return: {ls_mean * 100:.2f}%")
         print(f"   Annualized Volatility: {ls_std * 100:.2f}%")
@@ -724,14 +711,9 @@ def compute_all_intraday_systematic_momentum(
 
     Returns combined results and the aggregate portfolio.
     """
-    print("=" * 60)
     print("SYSTEMATIC MOMENTUM - ALL INTRADAY PERIODS")
-    print("=" * 60)
-
     all_results = {}
-
     for period in range(1, N_INTRADAY_PERIODS + 1):
-        print(f"\n{'='*60}")
         result = compute_intraday_systematic_momentum(
             start_date=start_date,
             end_date=end_date,
@@ -739,11 +721,7 @@ def compute_all_intraday_systematic_momentum(
         )
         all_results[period] = result
 
-    # Compute aggregate statistics
-    print("\n" + "=" * 60)
     print("AGGREGATE RESULTS ACROSS ALL PERIODS")
-    print("=" * 60)
-
     for period, result in all_results.items():
         if result["portfolio_returns"]:
             ls_returns = [pr["long_short"] for pr in result["portfolio_returns"]]
