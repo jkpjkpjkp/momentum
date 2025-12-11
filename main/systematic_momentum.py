@@ -108,15 +108,21 @@ def compute_portfolio_returns(
     return port_ret
 
 
-def cross_sectional_standardize(values: np.ndarray) -> np.ndarray:
-    """Standardize values cross-sectionally (each row has mean=0, std=1)."""
-    mean = np.nanmean(values, axis=1, keepdims=True)
-    std = np.nanstd(values, axis=1, keepdims=True)
-    result = (values - mean) / std
+def cross_sectional_rank(values: np.ndarray) -> np.ndarray:
+    """Compute cross-sectional ranks normalized to [-1, 1]."""
+    from scipy.stats import rankdata
 
-    n_valid = np.sum(~np.isnan(values), axis=1)
-    invalid_rows = (n_valid < 10) | (std.squeeze() <= 1e-10)
-    result[invalid_rows, :] = np.nan
+    n_rows, n_cols = values.shape
+    result = np.full_like(values, np.nan)
+
+    for i in range(n_rows):
+        row = values[i, :]
+        valid_mask = ~np.isnan(row)
+        n_valid = np.sum(valid_mask)
+        if n_valid < 10:
+            continue
+        ranks = rankdata(row[valid_mask], method="average")
+        result[i, valid_mask] = (ranks - 1) / (n_valid - 1) * 2 - 1
 
     return result
 
@@ -126,7 +132,7 @@ def load_anomaly_set(anomaly_list: list[Callable]) -> np.ndarray:
     for j, anomaly_func in enumerate(anomaly_list):
         print(f"  Loading anomaly {j+1}/{len(anomaly_list)}: {anomaly_func.__name__}")
         x = anomaly_func()
-        x = cross_sectional_standardize(x)
+        x = cross_sectional_rank(x)
         results.append(x)
     return np.stack(results, axis=2)
 
