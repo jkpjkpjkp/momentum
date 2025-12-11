@@ -38,9 +38,7 @@ def financial_distress_chs():
     """
     close = load_data("daily", "close")
     ret = load_data("daily", "return")
-
-    # shares outstanding
-    total_a = load_data("shares", "total_a")
+    shares = load_data("shares", "total_a")
 
     total_assets = load_data("balance_sheet", "total_assets_mrq_0")
     total_liabilities = load_data("balance_sheet", "total_liabilities_mrq_0")
@@ -51,12 +49,8 @@ def financial_distress_chs():
 
     n_time, n_ticker = close.shape
 
-    # Get aligned close prices and shares
-
-    total_a_aligned = total_a  # Already on same time grid as balance sheet
-
     # Market equity = close * shares outstanding
-    market_equity = close * total_a_aligned
+    market_equity = close * shares
 
     # Market value of total assets = book assets - book equity + market equity
     mva = total_assets - total_equity + market_equity

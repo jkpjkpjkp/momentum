@@ -5,18 +5,15 @@ import numpy as np
 from typing import Callable
 import polars as pl
 from datetime import datetime
+from tqdm import tqdm
 
 from the_short_of_it import anomalies as short_anomalies
 from factor_momentum import anomalies as fm_anomalies
 from .utils import (
     load_data,
     load_intraday_data,
-    compute_intraday_returns,
-    INTRADAY_PERIODS,
-    DATA_RAW_DIR,
+    get_available_dates,
 )
-
-N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)
 
 
 def to_bytes_list(tickers: list) -> list[bytes]:
@@ -131,7 +128,6 @@ def load_anomaly_set(anomaly_list: list[Callable]) -> np.ndarray:
         x = anomaly_func()
         x = cross_sectional_standardize(x)
         results.append(x)
-    breakpoint()
     return np.stack(results, axis=2)
 
 
@@ -140,12 +136,9 @@ def load_all_anomalies(min_valid_pct: float = 0.10) -> tuple[np.ndarray, list[st
     all_funcs = []
     all_names = []
 
-    print("Loading the_short_of_it anomalies...")
     for func in short_anomalies:
         all_funcs.append(func)
         all_names.append(f"short_{func.__name__}")
-
-    print("Loading factor_momentum anomalies...")
     for func in fm_anomalies:
         all_funcs.append(func)
         all_names.append(f"fm_{func.__name__}")
@@ -171,11 +164,34 @@ def load_all_anomalies(min_valid_pct: float = 0.10) -> tuple[np.ndarray, list[st
     return anomalies, filtered_names
 
 
-def get_available_dates() -> list[str]:
-    """Get list of available dates with intraday data."""
-    intraday_dir = DATA_RAW_DIR / "intra_30min"
-    dates = sorted([f.stem for f in intraday_dir.glob("*.parquet")])
-    return dates
+INTRADAY_PERIODS = [
+    "10:00:00",  # Period 1: 09:30-10:00
+    "10:30:00",  # Period 2: 10:00-10:30
+    "11:00:00",  # Period 3: 10:30-11:00
+    "11:30:00",  # Period 4: 11:00-11:30
+    "13:30:00",  # Period 5: 13:00-13:30 (after lunch break)
+    "14:00:00",  # Period 6: 13:30-14:00
+    "14:30:00",  # Period 7: 14:00-14:30
+    "15:00:00",  # Period 8: 14:30-15:00 (market close)
+]
+N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)
+def compute_intraday_returns(df) -> "pl.DataFrame":
+    df = df.sort("order_book_id", "datetime")
+
+    # Compute return = (close - open) / open for each bar
+    df = df.with_columns([
+        ((pl.col("close") - pl.col("open")) / pl.col("open")).alias("return"),
+        pl.col("datetime").dt.time().cast(pl.Utf8).alias("time_str"),
+    ])
+
+    # Map time to period number
+    time_to_period = {t: i + 1 for i, t in enumerate(INTRADAY_PERIODS)}
+
+    df = df.with_columns([
+        pl.col("time_str").replace(time_to_period, default=0).alias("period")
+    ])
+
+    return df.select(["order_book_id", "period", "return", "datetime"])
 
 
 def compute_intraday_systematic_momentum_by_period(
@@ -192,8 +208,7 @@ def compute_intraday_systematic_momentum_by_period(
     # Load daily characteristics
     print("\n1. Loading daily data...")
     time, ticker, _ = load_data("daily", "return", time_and_ticker=True)
-
-    # Create date lookup from nanosecond timestamps
+    assert len(ticker) == 1000
     dates_ns = {
         datetime.fromtimestamp(t / 1e9).strftime("%Y-%m-%d"): i
         for i, t in enumerate(time)
@@ -201,17 +216,10 @@ def compute_intraday_systematic_momentum_by_period(
     assert len(dates_ns) == len(time)
     ticker_to_idx = {t: i for i, t in enumerate(ticker)}
 
-    print(f"   Daily data: {len(time)} days, {len(ticker)} stocks")
-
-    print("\n2. Loading anomaly characteristics...")
     anomalies, anomaly_names = load_all_anomalies()
     n_factors = len(anomaly_names)
-    print(f"   {n_factors} anomalies loaded")
-
-    print("\n3. Loading intraday dates...")
     all_dates = get_available_dates()
     dates = [d for d in all_dates if start_date <= d <= end_date]
-    print(f"   {len(dates)} trading days in range")
 
     # Storage for period-specific thetas: thetas_by_period[period][date] = theta
     thetas_by_period = {p: {} for p in range(1, N_INTRADAY_PERIODS + 1)}
@@ -219,13 +227,9 @@ def compute_intraday_systematic_momentum_by_period(
 
     print("\n4. Running period-specific cross-sectional regressions...")
 
-    for date_idx, date in enumerate(dates):
-        if date_idx % 50 == 0:
-            print(f"   Processing {date} ({date_idx+1}/{len(dates)})")
-
+    for date_idx, date in tqdm(enumerate(dates)):
         # Get previous trading day index for characteristics
-        if date not in dates_ns:
-            continue
+        assert date in dates_ns, f"Date {date} not found in daily data"
         t_idx = dates_ns[date]
         if t_idx == 0:
             continue
@@ -312,9 +316,6 @@ def compute_intraday_systematic_momentum_by_period(
 
     for period in range(1, N_INTRADAY_PERIODS + 1):
         port_rets = portfolio_returns_by_period[period]
-        if not port_rets:
-            print(f"{INTRADAY_PERIODS[period-1]:<20} {'N/A':>8}")
-            continue
 
         ls_returns = [pr["long_short"] for pr in port_rets]
         all_ls_returns.extend(ls_returns)
@@ -330,17 +331,14 @@ def compute_intraday_systematic_momentum_by_period(
             f"{ls_mean*100:>9.2f}% {ls_std*100:>9.2f}% {ls_sharpe:>8.2f}"
         )
 
-    # Aggregate statistics
-    if all_ls_returns:
-        ann_factor = 252 * N_INTRADAY_PERIODS
-        agg_mean = np.mean(all_ls_returns) * ann_factor
-        agg_std = np.std(all_ls_returns) * np.sqrt(ann_factor)
-        agg_sharpe = agg_mean / agg_std if agg_std > 0 else np.nan
-
-        print(
-            f"{'AGGREGATE':<20} {len(all_ls_returns):>8} "
-            f"{agg_mean*100:>9.2f}% {agg_std*100:>9.2f}% {agg_sharpe:>8.2f}"
-        )
+    ann_factor = 252 * N_INTRADAY_PERIODS
+    agg_mean = np.mean(all_ls_returns) * ann_factor
+    agg_std = np.std(all_ls_returns) * np.sqrt(ann_factor)
+    agg_sharpe = agg_mean / agg_std if agg_std > 0 else np.nan
+    print(
+        f"{'AGGREGATE':<20} {len(all_ls_returns):>8} "
+        f"{agg_mean*100:>9.2f}% {agg_std*100:>9.2f}% {agg_sharpe:>8.2f}"
+    )
 
     return {
         "thetas_by_period": thetas_by_period,

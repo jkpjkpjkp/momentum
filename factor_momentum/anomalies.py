@@ -447,16 +447,17 @@ def liquidity() -> np.ndarray:
     volume = load_data("daily", "volume")
     shares = load_data("shares", "circulation_a")
 
-    turnover = []
     lookback = 21  # 1 month average
-    n_time = volume.shape[0]
+    n_time, n_stocks = volume.shape
+
+    turnover = np.full((n_time, n_stocks), np.nan)  # Pad with NaN
     for t in range(lookback, n_time):
         vol = volume[t - lookback : t, :]
         shr = shares[t, :]  # Use current float shares
         avg_vol = np.nanmean(vol, axis=0)
-        turnover.append(avg_vol / shr)
+        turnover[t, :] = avg_vol / shr
 
-    return np.array(turnover)
+    return turnover
 
 
 # -----------------------------------------------------------------------------
