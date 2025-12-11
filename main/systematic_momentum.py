@@ -112,7 +112,7 @@ def cross_sectional_rank(values: np.ndarray) -> np.ndarray:
     """Compute cross-sectional ranks normalized to [-1, 1]."""
     from scipy.stats import rankdata
 
-    n_rows, n_cols = values.shape
+    n_rows = values.shape[0]
     result = np.full_like(values, np.nan)
 
     for i in range(n_rows):
@@ -193,8 +193,8 @@ def compute_intraday_returns(df) -> "pl.DataFrame":
 
 
 def compute_intraday_systematic_momentum_by_period(
-    start_date: str = "2020-01-01",
-    end_date: str = "2024-12-31",
+    start_date: str,
+    end_date: str,
     n_portfolios: int = 10,
 ) -> dict:
     time, ticker, _ = load_data("daily", "close", time_and_ticker=True)
@@ -202,6 +202,7 @@ def compute_intraday_systematic_momentum_by_period(
         datetime.fromtimestamp(t / 1e9).strftime("%Y-%m-%d"): i
         for i, t in enumerate(time)
     }
+    assert len(dates_ns) == len(time)
     ticker_to_idx = {t: i for i, t in enumerate(ticker)}
 
     anomalies, anomaly_names = load_all_anomalies()
@@ -335,6 +336,6 @@ def compute_intraday_systematic_momentum_by_period(
 
 if __name__ == "__main__":
     results = compute_intraday_systematic_momentum_by_period(
-        start_date="2018-01-01",
-        end_date="2022-12-31",
+        start_date="2016-01-01",
+        end_date="2019-11-31",
     )

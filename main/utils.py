@@ -6,7 +6,7 @@ import polars as pl
 
 _TOP_1000_MASK: np.ndarray | None = None
 _TOP_1000_TICKERS: set[bytes] | None = None
-def get_top_1000_mask(reference_date: str = "2020-01-04") -> np.ndarray:
+def get_top_1000_mask(reference_date: str = "2015-01-07") -> np.ndarray:
     """Get boolean mask for top 1000 stocks by market cap at reference date.
 
     Returns mask of shape (5480,) where True = in top 1000.
