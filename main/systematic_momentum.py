@@ -187,9 +187,8 @@ def compute_intraday_returns(df) -> "pl.DataFrame":
     time_to_period = {t: i + 1 for i, t in enumerate(INTRADAY_PERIODS)}
     df = df.with_columns(
         (pl.col("close") / pl.col("open") - 1).alias("ret"),
-        pl.col("datetime").dt.time().cast(pl.Utf8).replace(time_to_period).alias("period")
+        pl.col("datetime").dt.time().cast(pl.Utf8).replace(time_to_period).cast(pl.Int8).alias("period")
     )
-
     return df.select(["order_book_id", "period", "ret", "datetime"])
 
 
@@ -257,7 +256,7 @@ def compute_intraday_systematic_momentum_by_period(
         char_t_idx = t_idx - 1
 
         df = load_intraday_data(date)
-        ret_df = compute_intraday_returns(df)
+        df = compute_intraday_returns(df)
 
         prev_sys = None  # SYS from previous period
 
@@ -270,7 +269,7 @@ def compute_intraday_systematic_momentum_by_period(
             else:
                 theta = thetas_by_period[period][prev_date]
 
-            period_data = ret_df.filter(pl.col("period") == period)
+            period_data = df.filter(pl.col("period") == period)
             if period_data.height == 0:
                 continue
 
