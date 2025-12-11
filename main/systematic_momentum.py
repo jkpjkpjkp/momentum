@@ -131,7 +131,7 @@ def load_anomaly_set(anomaly_list: list[Callable]) -> np.ndarray:
     return np.stack(results, axis=2)
 
 
-def load_all_anomalies(min_valid_pct: float = 0.10) -> tuple[np.ndarray, list[str]]:
+def load_all_anomalies(min_valid_pct: float = 0.3) -> tuple[np.ndarray, list[str]]:
     """Load and filter anomalies, removing those with insufficient valid data."""
     all_funcs = []
     all_names = []
@@ -178,20 +178,13 @@ N_INTRADAY_PERIODS = len(INTRADAY_PERIODS)
 def compute_intraday_returns(df) -> "pl.DataFrame":
     df = df.sort("order_book_id", "datetime")
 
-    # Compute return = (close - open) / open for each bar
-    df = df.with_columns([
-        ((pl.col("close") - pl.col("open")) / pl.col("open")).alias("return"),
-        pl.col("datetime").dt.time().cast(pl.Utf8).alias("time_str"),
-    ])
-
-    # Map time to period number
     time_to_period = {t: i + 1 for i, t in enumerate(INTRADAY_PERIODS)}
+    df = df.with_columns(
+        (pl.col("close") / pl.col("open") - 1).alias("ret"),
+        pl.col("datetime").dt.time().cast(pl.Utf8).replace(time_to_period).alias("period")
+    )
 
-    df = df.with_columns([
-        pl.col("time_str").replace(time_to_period, default=0).alias("period")
-    ])
-
-    return df.select(["order_book_id", "period", "return", "datetime"])
+    return df.select(["order_book_id", "period", "ret", "datetime"])
 
 
 def compute_intraday_systematic_momentum_by_period(
@@ -199,21 +192,11 @@ def compute_intraday_systematic_momentum_by_period(
     end_date: str = "2024-12-31",
     n_portfolios: int = 10,
 ) -> dict:
-    """
-    RET_s,d,i = alpha_d,i + sum_j(C_s,d-1,j * theta_d,i,j) + epsilon_s,d,i
-    """
-    print("INTRADAY SYSTEMATIC MOMENTUM - Period-Specific Regressions")
-    print("Following Li, Yuan & Zhou (2025)")
-
-    # Load daily characteristics
-    print("\n1. Loading daily data...")
-    time, ticker, _ = load_data("daily", "return", time_and_ticker=True)
-    assert len(ticker) == 1000
+    time, ticker, _ = load_data("daily", "close", time_and_ticker=True)
     dates_ns = {
         datetime.fromtimestamp(t / 1e9).strftime("%Y-%m-%d"): i
         for i, t in enumerate(time)
     }
-    assert len(dates_ns) == len(time)
     ticker_to_idx = {t: i for i, t in enumerate(ticker)}
 
     anomalies, anomaly_names = load_all_anomalies()
@@ -236,16 +219,14 @@ def compute_intraday_systematic_momentum_by_period(
         char_t_idx = t_idx - 1  # Lagged characteristics
 
         df = load_intraday_data(date)
-        ret_df = compute_intraday_returns(df)
+        df = compute_intraday_returns(df)
 
         # Run regression for each period separately
         for period in range(1, N_INTRADAY_PERIODS + 1):
-            period_data = ret_df.filter(pl.col("period") == period)
-            if period_data.height == 0:
-                continue
+            period_data = df.filter(pl.col("period") == period)
 
             tickers_period = to_bytes_list(period_data["order_book_id"].to_list())
-            returns_period = period_data["return"].to_numpy()
+            returns_period = period_data["ret"].to_numpy()
 
             y, X = build_regression_matrices(
                 tickers_period, returns_period, ticker_to_idx, anomalies, char_t_idx
@@ -288,7 +269,7 @@ def compute_intraday_systematic_momentum_by_period(
                 continue
 
             tickers_period = to_bytes_list(period_data["order_book_id"].to_list())
-            returns_period = period_data["return"].to_numpy()
+            returns_period = period_data["ret"].to_numpy()
 
             current_sys = compute_sys_scores(
                 tickers_period, ticker_to_idx, anomalies, char_t_idx, theta

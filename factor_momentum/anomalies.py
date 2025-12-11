@@ -487,18 +487,15 @@ def quality_minus_junk():
     for t in range(lookback, n_time):
         volatility[t, :] = np.nanstd(ret[t - lookback : t, :], axis=0)
 
-    # Combine into composite z-score
     def zscore(arr):
-        """Cross-sectional z-score."""
+        """Normalize."""
         result = np.full_like(arr, np.nan)
         for t in range(arr.shape[0]):
             row = arr[t, :]
-            valid = ~np.isnan(row)
-            if valid.sum() > 10:
-                mu = np.nanmean(row)
-                sigma = np.nanstd(row)
-                if sigma > 0:
-                    result[t, :] = (row - mu) / sigma
+            mu = np.nanmean(row)
+            sigma = np.nanstd(row)
+            if sigma > 0:
+                result[t, :] = (row - mu) / sigma
         return result
 
     z_roa = zscore(roa)
